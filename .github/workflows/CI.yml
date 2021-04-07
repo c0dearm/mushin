@@ -17,10 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Cargo Fmt Check
-        uses: icepuma/rust-action@master
+      - uses: actions-rs/toolchain@v1
         with:
-          args: cargo fmt --all -- --check
+          toolchain: stable
+          components: rustfmt
+      - name: Cargo Fmt Check
+        run: cargo fmt --all -- --check
   build:
     runs-on: ubuntu-latest
     steps:
@@ -31,6 +33,6 @@ jobs:
       - name: Install build-essential packages
         run: sudo apt-get update && sudo apt-get install -y build-essential
       - name: Build
-        run: cargo build --verbose
+        run: cargo +nightly build --verbose
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo +nightly test --verbose
