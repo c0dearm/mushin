@@ -1,0 +1,36 @@
+on: [push, pull_request]
+name: CI
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          components: clippy
+      - name: Cargo Clippy Check
+        uses: actions-rs/clippy@master
+        with:
+          args: --all-features --all-targets -- -D warnings
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Cargo Fmt Check
+        uses: icepuma/rust-action@master
+        with:
+          args: cargo fmt --all -- --check
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+      - name: Install build-essential packages
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
