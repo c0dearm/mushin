@@ -1,0 +1,12 @@
+[package]
+name = "gamma"
+version = "0.1.0"
+authors = ["Aitor Ruano <codearm@pm.me>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.8"
+
+[dev-dependencies]
+gamma_derive = { path = "../gamma_derive" }
+rand_chacha = "0.3"

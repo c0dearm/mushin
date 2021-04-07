@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "gamma",
+    "gamma_derive",
+    "example",
+]
