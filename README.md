@@ -1,19 +1,21 @@
-# MUSHIN
+# Mushin: Compile-time creation of neural networks
 
+[![Rust](https://github.com/c0dearm/mushin/workflows/Rust/badge.svg?branch=master)](https://github.com/c0dearm/mushin/actions)
+[![Crates](https://img.shields.io/crates/v/mushin.svg)](https://crates.io/crates/mushin)
+[![Docs](https://docs.rs/mushin/badge.svg)](https://docs.rs/mushin)
+[![Codecov](https://codecov.io/gh/c0dearm/mushin/branch/master/graph/badge.svg)](https://codecov.io/gh/c0dearm/mushin)
 [![License](https://camo.githubusercontent.com/47069b7e06b64b608c692a8a7f40bc6915cf629c/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e73652d417061636865322e302532464d49542d626c75652e737667)](https://github.com/c0dearm/mushin/blob/master/COPYRIGHT)
 
-Compile-time creation of neural networks with Rust
+[Mushin](https://en.wikipedia.org/wiki/Mushin_(mental_state) is a Japanese term used in martial arts that refers to the state of mind obtained by practice. At this point, a person relies not on what they think should be the next move, but what is their trained natural reaction (or instinct).
 
 ## Description
 
-This is for now just a showcase project of what can be done with `const generics` introduced in [Rust 1.51](https://blog.rust-lang.org/2021/03/25/Rust-1.51.0.html). There is not a single usage of `vec` in this project (as of today).
+Mushin allows the developer to build neural networks at compile-time, with preallocated arrays with well defined sizes. This has mainly three very important benefits:
 
-MUSHIN allows the developer to build neural networks at compile-time, with preallocated arrays with well defined sizes. Aside from the performance improvement at runtime, another important benefit is that any possible mistake with the layout of the neural network, for example mismatching the inputs/outputs in the chain of layers, will be raised at compilation time.
-
-This magic is accomplished thanks to two awesome Rust features:
-
-1. `const generics`: The layer weights are defined as multi-dimensional arrays with generic sizes. Before this feature was introduced the only option was to use `vec` or go crazy and define different layer types for each possible number of weights!
-2. `derive macro`: It is impossible to define an array or any other iterable of layers because it is an hetereogeneous set (different number of weights for each layer). To perform the forward pass you need to chain all the layers and propagate the input up to the lastest layer. The `NeuralNetwork` derive macro defines the `forward` method at compile-time, doing exactly that without any iteration.
+1. **Compile-time network consistency check**: Any defect in your neural network (i.e. mismatching layers inputs/outputs) will be raised at compile-time. You can enjoy your coffee while your network inference or training process never fails!
+2. **Awesome Rust compiler optimizations**: Because the neural network is completely defined at compile-time, the compiler is able
+to perform smart optimizations, like unrolling loops or injecting [SIMD](https://en.wikipedia.org/wiki/SIMD) instructions.
+3. **Support for embedded**: The `std` library is not required to build neural networks so it can run on any target that Rust supports.
 
 ## Usage
 
@@ -30,16 +32,17 @@ And this is a very simple example to get you started:
 ```rust
 use rand::distributions::Uniform;
 
-use mushin::{activations::relu, layers::Dense, NeuralNetwork};
+use mushin::{activations::ReLu, layers::Dense, NeuralNetwork};
 use mushin_derive::NeuralNetwork;
 
 // Builds a neural network with 2 inputs and 1 output
 // Made of 3 feed forward layers, you can have as many as you want and with any name
 #[derive(NeuralNetwork, Debug)]
 struct MyNetwork {
-    input: Dense<2, 4>, // <# inputs, # outputs>
-    hidden: Dense<4, 2>,
-    output: Dense<2, 1>,
+    // LayerType<ActivationType, # inputs, # outputs>
+    input: Dense<ReLu, 2, 4>,
+    hidden: Dense<ReLu, 4, 2>,
+    output: Dense<ReLu, 2, 1>,
 }
 
 impl MyNetwork {
@@ -49,9 +52,9 @@ impl MyNetwork {
         let dist = Uniform::from(-1.0..=1.0);
 
         MyNetwork {
-            input: Dense::random(&mut rng, &dist, relu),
-            hidden: Dense::random(&mut rng, &dist, relu),
-            output: Dense::random(&mut rng, &dist, relu),
+            input: Dense::random(&mut rng, &dist),
+            hidden: Dense::random(&mut rng, &dist),
+            output: Dense::random(&mut rng, &dist),
         }
     }
 }
@@ -81,7 +84,7 @@ Note how the forward method expects two input values because that's what the fir
 ## Roadmap
 
 - [x] Compile-time neural network consistency check
-- [ ] Docs, CI/CD & Benchmarks
+- [x] Docs, CI/CD & Benchmarks
 - [ ] Backward pass
 - [ ] More layer types (convolution, dropout, lstm...)
 - [ ] More activation functions (sigmoid, softmax...)
@@ -97,7 +100,7 @@ Many thanks!
 
 ## License
 
-MUSHIN is distributed under the terms of both the MIT license and the
+Mushin is distributed under the terms of both the MIT license and the
 Apache License (Version 2.0).
 
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT), and
