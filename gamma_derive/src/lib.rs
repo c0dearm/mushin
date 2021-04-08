@@ -57,8 +57,8 @@ fn impl_neural_network(name: Ident, fields: Punctuated<Field, Comma>) -> TokenSt
         quote!(self.#name.forward(#acc))
     });
 
-    let input_size = as_usize(&get_field_type_args(fields.first().unwrap())[0]);
-    let output_size = as_usize(&get_field_type_args(fields.last().unwrap())[1]);
+    let input_size = as_usize(&get_field_type_args(fields.first().unwrap())[1]);
+    let output_size = as_usize(&get_field_type_args(fields.last().unwrap())[2]);
 
     quote! {
         impl NeuralNetwork<#input_size, #output_size> for #name {

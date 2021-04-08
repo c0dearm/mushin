@@ -9,7 +9,7 @@ pub trait NeuralNetwork<const I: usize, const O: usize> {
 #[cfg(test)]
 mod tests {
     use super::NeuralNetwork;
-    use crate::activations::relu;
+    use crate::activations::ReLu;
     use crate::layers::Dense;
     use gamma_derive::NeuralNetwork;
 
@@ -18,9 +18,9 @@ mod tests {
 
     #[derive(NeuralNetwork)]
     struct TestNetwork {
-        input: Dense<2, 3>,
-        hidden: Dense<3, 3>,
-        output: Dense<3, 1>,
+        input: Dense<ReLu, 2, 3>,
+        hidden: Dense<ReLu, 3, 3>,
+        output: Dense<ReLu, 3, 1>,
     }
 
     #[test]
@@ -29,9 +29,9 @@ mod tests {
         let dist = Uniform::from(-1.0..=1.0);
 
         let nn = TestNetwork {
-            input: Dense::random(&mut rng, &dist, relu),
-            hidden: Dense::random(&mut rng, &dist, relu),
-            output: Dense::random(&mut rng, &dist, relu),
+            input: Dense::random(&mut rng, &dist),
+            hidden: Dense::random(&mut rng, &dist),
+            output: Dense::random(&mut rng, &dist),
         };
 
         let output = nn.forward([1.0, 1.0]);

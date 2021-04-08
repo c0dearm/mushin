@@ -1,13 +1,13 @@
 use rand::distributions::Uniform;
 
-use gamma::{activations::relu, layers::Dense, NeuralNetwork};
+use gamma::{activations::ReLu, layers::Dense, NeuralNetwork};
 use gamma_derive::NeuralNetwork;
 
 #[derive(NeuralNetwork, Debug)]
 struct MyNetwork {
-    input: Dense<2, 4>,
-    hidden: Dense<4, 2>,
-    output: Dense<2, 1>,
+    input: Dense<ReLu, 2, 4>,
+    hidden: Dense<ReLu, 4, 2>,
+    output: Dense<ReLu, 2, 1>,
 }
 
 impl MyNetwork {
@@ -16,9 +16,9 @@ impl MyNetwork {
         let dist = Uniform::from(-1.0..=1.0);
 
         MyNetwork {
-            input: Dense::random(&mut rng, &dist, relu),
-            hidden: Dense::random(&mut rng, &dist, relu),
-            output: Dense::random(&mut rng, &dist, relu),
+            input: Dense::random(&mut rng, &dist),
+            hidden: Dense::random(&mut rng, &dist),
+            output: Dense::random(&mut rng, &dist),
         }
     }
 }
