@@ -10,7 +10,7 @@ mod tests {
 
     #[test]
     fn relu_output() {
-        assert!((relu(-1.0) - 0.0).abs() < f32::EPSILON);
-        assert!((relu(1.0) - 1.0).abs() < f32::EPSILON);
+        approx::assert_relative_eq!(relu(-1.0), 0.0);
+        approx::assert_relative_eq!(relu(1.0), 1.0);
     }
 }

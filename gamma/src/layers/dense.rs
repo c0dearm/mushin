@@ -1,23 +1,18 @@
 use crate::activations::Activation;
-use core::mem::MaybeUninit;
 use rand::{distributions::Distribution, Rng, RngCore};
 
 #[derive(Debug)]
-pub struct Dense<const I: usize, const O: usize>
-where
-    [(); I + 1]: ,
-{
-    weights: [[f32; I + 1]; O], // One extra column for bias weights
+pub struct Dense<const I: usize, const O: usize> {
+    weights: [[f32; I]; O],
+    bias: [f32; O],
     activation: Activation,
 }
 
-impl<const I: usize, const O: usize> Dense<I, O>
-where
-    [(); I + 1]: ,
-{
-    pub fn new(weights: [[f32; I + 1]; O], activation: Activation) -> Self {
+impl<const I: usize, const O: usize> Dense<I, O> {
+    pub fn new(weights: [[f32; I]; O], bias: [f32; O], activation: Activation) -> Self {
         Dense {
             weights,
+            bias,
             activation,
         }
     }
@@ -27,32 +22,36 @@ where
         dist: &D,
         activation: Activation,
     ) -> Self {
-        let mut weights = [[0.0; I + 1]; O];
+        let mut weights = [[0.0; I]; O];
+        let mut bias = [0.0; O];
 
         weights
             .iter_mut()
             .flatten()
+            .chain(bias.iter_mut())
             .zip(rng.sample_iter(dist))
             .for_each(|(w, r)| *w = r);
 
-        Dense::new(weights, activation)
+        Dense::new(weights, bias, activation)
     }
 
     pub fn forward(&self, input: [f32; I]) -> [f32; O] {
-        let input = input.iter().chain([1.0].iter()); // Add 1.0 to input for bias weights
+        let mut output = [0.0; O];
 
-        let mut output = MaybeUninit::uninit_array();
+        output
+            .iter_mut()
+            .zip(self.bias.iter())
+            .enumerate()
+            .for_each(|(k, (o, b))| {
+                *o = (self.activation)(
+                    input
+                        .iter()
+                        .zip(self.weights[k].iter())
+                        .fold(*b, |acc, (x, y)| acc + x * y),
+                )
+            });
 
-        for (k, o) in output.iter_mut().enumerate() {
-            *o = MaybeUninit::new((self.activation)(
-                input
-                    .clone()
-                    .zip(self.weights[k].iter())
-                    .fold(0.0, |acc, (x, y)| acc + x * y),
-            ));
-        }
-
-        unsafe { MaybeUninit::array_assume_init(output) }
+        output
     }
 }
 
@@ -66,8 +65,10 @@ mod tests {
 
     #[test]
     fn dense_new() {
-        let layer = Dense::<2, 2>::new([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], relu);
-        assert_eq!(layer.weights, [[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]]);
+        let layer = Dense::<2, 2>::new([[0.0, 1.0], [2.0, 3.0]], [1.0, 1.0], relu);
+        approx::assert_relative_eq!(layer.weights[0][..], [0.0, 1.0]);
+        approx::assert_relative_eq!(layer.weights[1][..], [2.0, 3.0]);
+        approx::assert_relative_eq!(layer.bias[..], [1.0, 1.0]);
     }
 
     #[test]
@@ -75,30 +76,19 @@ mod tests {
         let mut rng = ChaCha8Rng::from_seed(Default::default());
         let between = Uniform::from(-1.0..=1.0);
         let layer = Dense::<2, 2>::random(&mut rng, &between, relu);
-        assert_eq!(
-            layer.weights,
-            [
-                [-0.6255188, 0.67383957, 0.8181262],
-                [0.26284897, 0.5238807, -0.53516835]
-            ]
-        );
+        approx::assert_relative_eq!(layer.weights[0][..], [-0.6255188, 0.67383957]);
+        approx::assert_relative_eq!(layer.weights[1][..], [0.8181262, 0.26284897]);
+        approx::assert_relative_eq!(layer.bias[..], [0.5238807, -0.53516835]);
     }
 
     #[test]
     fn dense_forward() {
         let layer = Dense::<2, 4>::new(
-            [
-                [1.0, 1.0, 1.0],
-                [1.0, 1.0, 1.0],
-                [-2.0, -2.0, -2.0],
-                [-2.0, -2.0, -2.0],
-            ],
+            [[1.0, 1.0], [1.0, 1.0], [-2.0, -2.0], [-2.0, -2.0]],
+            [-2.0, 1.0, -2.0, 1.0],
             relu,
         );
         let output = layer.forward([1.0, 1.0]);
-        assert!((output[0] - 3.0).abs() < f32::EPSILON);
-        assert!((output[1] - 3.0).abs() < f32::EPSILON);
-        assert!((output[2] - 0.0).abs() < f32::EPSILON);
-        assert!((output[3] - 0.0).abs() < f32::EPSILON);
+        approx::assert_relative_eq!(output[..], [0.0, 3.0, 0.0, 0.0]);
     }
 }

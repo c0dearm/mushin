@@ -10,3 +10,4 @@ rand = "0.8"
 [dev-dependencies]
 gamma_derive = { path = "../gamma_derive" }
 rand_chacha = "0.3"
+approx = "0.4"

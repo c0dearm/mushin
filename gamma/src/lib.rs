@@ -1,9 +1,3 @@
-#![allow(incomplete_features)]
-#![feature(maybe_uninit_uninit_array)]
-#![feature(maybe_uninit_array_assume_init)]
-#![feature(const_generics)]
-#![feature(const_evaluatable_checked)]
-
 pub mod activations;
 pub mod layers;
 
@@ -41,6 +35,6 @@ mod tests {
         };
 
         let output = nn.forward([1.0, 1.0]);
-        assert!((output[0] - 0.0).abs() < f32::EPSILON);
+        approx::assert_relative_eq!(output[..], [0.0]);
     }
 }
