@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "gamma",
-    "gamma_derive",
+    "mushin",
+    "mushin_derive",
     "example",
 ]

@@ -1,7 +1,7 @@
 use rand::distributions::Uniform;
 
-use gamma::{activations::ReLu, layers::Dense, NeuralNetwork};
-use gamma_derive::NeuralNetwork;
+use mushin::{activations::ReLu, layers::Dense, NeuralNetwork};
+use mushin_derive::NeuralNetwork;
 
 #[derive(NeuralNetwork, Debug)]
 struct MyNetwork {

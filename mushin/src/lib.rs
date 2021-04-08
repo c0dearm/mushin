@@ -11,7 +11,7 @@ mod tests {
     use super::NeuralNetwork;
     use crate::activations::ReLu;
     use crate::layers::Dense;
-    use gamma_derive::NeuralNetwork;
+    use mushin_derive::NeuralNetwork;
 
     use rand::{distributions::Uniform, SeedableRng};
     use rand_chacha::ChaCha8Rng;

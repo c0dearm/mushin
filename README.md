@@ -1,6 +1,6 @@
-# GAMMA
+# MUSHIN
 
-[![License](https://camo.githubusercontent.com/47069b7e06b64b608c692a8a7f40bc6915cf629c/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e73652d417061636865322e302532464d49542d626c75652e737667)](https://github.com/c0dearm/gamma/blob/master/COPYRIGHT)
+[![License](https://camo.githubusercontent.com/47069b7e06b64b608c692a8a7f40bc6915cf629c/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e73652d417061636865322e302532464d49542d626c75652e737667)](https://github.com/c0dearm/mushin/blob/master/COPYRIGHT)
 
 Compile-time creation of neural networks with Rust
 
@@ -8,7 +8,7 @@ Compile-time creation of neural networks with Rust
 
 This is for now just a showcase project of what can be done with `const generics` introduced in [Rust 1.51](https://blog.rust-lang.org/2021/03/25/Rust-1.51.0.html). There is not a single usage of `vec` in this project (as of today).
 
-GAMMA allows the developer to build neural networks at compile-time, with preallocated arrays with well defined sizes. Aside from the performance improvement at runtime, another important benefit is that any possible mistake with the layout of the neural network, for example mismatching the inputs/outputs in the chain of layers, will be raised at compilation time.
+MUSHIN allows the developer to build neural networks at compile-time, with preallocated arrays with well defined sizes. Aside from the performance improvement at runtime, another important benefit is that any possible mistake with the layout of the neural network, for example mismatching the inputs/outputs in the chain of layers, will be raised at compilation time.
 
 This magic is accomplished thanks to two awesome Rust features:
 
@@ -21,8 +21,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gamma = "0.1"
-gamma_derive = "0.1"
+mushin = "0.1"
+mushin_derive = "0.1"
 ```
 
 And this is a very simple example to get you started:
@@ -30,8 +30,8 @@ And this is a very simple example to get you started:
 ```rust
 use rand::distributions::Uniform;
 
-use gamma::{activations::relu, layers::Dense, NeuralNetwork};
-use gamma_derive::NeuralNetwork;
+use mushin::{activations::relu, layers::Dense, NeuralNetwork};
+use mushin_derive::NeuralNetwork;
 
 // Builds a neural network with 2 inputs and 1 output
 // Made of 3 feed forward layers, you can have as many as you want and with any name
@@ -89,7 +89,7 @@ Note how the forward method expects two input values because that's what the fir
 
 ## Contributing
 
-If you find a vulnerability, bug or would like a new feature, [open a new issue](https://github.com/c0dearm/gamma/issues/new).
+If you find a vulnerability, bug or would like a new feature, [open a new issue](https://github.com/c0dearm/mushin/issues/new).
 
 To introduce your changes into the codebase, submit a Pull Request.
 
@@ -97,7 +97,7 @@ Many thanks!
 
 ## License
 
-GAMMA is distributed under the terms of both the MIT license and the
+MUSHIN is distributed under the terms of both the MIT license and the
 Apache License (Version 2.0).
 
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT), and

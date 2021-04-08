@@ -1,5 +1,5 @@
 [package]
-name = "gamma_derive"
+name = "mushin_derive"
 version = "0.1.0"
 authors = ["Aitor Ruano <codearm@pm.me>"]
 edition = "2018"
