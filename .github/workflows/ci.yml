@@ -19,10 +19,11 @@ jobs:
       - name: Run cargo check
         uses: actions-rs/cargo@v1
         with:
-          command: check --all
+          command: check
+          args: --all
 
   test:
-    name: Test Suite
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -39,6 +40,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          args: --all
 
   lints:
     name: Lints
@@ -65,4 +67,4 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features -- -D warnings
+          args: --all --all-features -- -D warnings
