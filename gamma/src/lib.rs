@@ -1,3 +1,4 @@
+#![allow(incomplete_features)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(maybe_uninit_array_assume_init)]
 #![feature(const_generics)]
@@ -40,6 +41,6 @@ mod tests {
         };
 
         let output = nn.forward([1.0, 1.0]);
-        assert_eq!(output, [0.0]);
+        assert!((output[0] - 0.0).abs() < f32::EPSILON);
     }
 }

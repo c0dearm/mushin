@@ -1,2 +1,6 @@
 /target
 Cargo.lock
+/.idea/.gitignore
+/.idea/gamma.iml
+/.idea/modules.xml
+/.idea/vcs.xml

@@ -96,6 +96,9 @@ mod tests {
             relu,
         );
         let output = layer.forward([1.0, 1.0]);
-        assert_eq!(output, [3.0, 3.0, 0.0, 0.0]);
+        assert!((output[0] - 3.0).abs() < f32::EPSILON);
+        assert!((output[1] - 3.0).abs() < f32::EPSILON);
+        assert!((output[2] - 0.0).abs() < f32::EPSILON);
+        assert!((output[3] - 0.0).abs() < f32::EPSILON);
     }
 }
