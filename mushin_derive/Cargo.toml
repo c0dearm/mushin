@@ -3,6 +3,17 @@ name = "mushin_derive"
 version = "0.1.0"
 authors = ["Aitor Ruano <codearm@pm.me>"]
 edition = "2018"
+description = "Compile-time creation of neural networks"
+homepage = "https://github.com/c0dearm/mushin"
+repository = "https://github.com/c0dearm/mushin"
+readme = "README.md"
+keywords = ["neural", "network", "artificial", "intelligence", "AI"]
+categories = ["algorithms", "no-std", "mathematics"]
+license = "MIT/Apache-2.0"
+
+[badges]
+maintenance = { status = "actively-developed" }
+codecov = { repository = "c0dearm/mushin" }
 
 [lib]
 proc-macro = true
