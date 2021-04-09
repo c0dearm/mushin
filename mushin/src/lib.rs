@@ -1,5 +1,6 @@
 pub mod activations;
 pub mod layers;
+pub mod losses;
 
 // Trait to use with `derive` on structs containing the neural network layers
 pub trait NeuralNetwork<const I: usize, const O: usize> {

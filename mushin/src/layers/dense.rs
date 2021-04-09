@@ -3,18 +3,18 @@ use core::marker::PhantomData;
 use rand::{distributions::Distribution, Rng, RngCore};
 
 #[derive(Debug)]
-pub struct Dense<A: Activation, const I: usize, const O: usize> {
+pub struct Dense<A: Activation<O>, const I: usize, const O: usize> {
     weights: [[f32; I]; O],
     bias: [f32; O],
-    _phantom: PhantomData<A>,
+    activation: PhantomData<A>,
 }
 
-impl<A: Activation, const I: usize, const O: usize> Dense<A, I, O> {
+impl<A: Activation<O>, const I: usize, const O: usize> Dense<A, I, O> {
     pub fn new(weights: [[f32; I]; O], bias: [f32; O]) -> Self {
         Dense {
             weights,
             bias,
-            _phantom: PhantomData,
+            activation: PhantomData,
         }
     }
 
@@ -33,21 +33,17 @@ impl<A: Activation, const I: usize, const O: usize> Dense<A, I, O> {
     }
 
     pub fn forward(&self, input: [f32; I]) -> [f32; O] {
-        let mut output = [0.0; O];
+        let mut output = self.bias;
 
-        output
-            .iter_mut()
-            .zip(self.bias.iter())
-            .enumerate()
-            .for_each(|(k, (o, b))| {
-                *o = A::activation(
-                    input
-                        .iter()
-                        .zip(self.weights[k].iter())
-                        .fold(*b, |acc, (x, y)| acc + x * y),
-                )
-            });
+        output.iter_mut().enumerate().for_each(|(k, o)| {
+            *o += input
+                .iter()
+                .zip(self.weights[k].iter())
+                .map(|(x, w)| x * w)
+                .sum::<f32>()
+        });
 
+        A::activation(&mut output);
         output
     }
 }
