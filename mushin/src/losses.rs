@@ -22,7 +22,7 @@ impl<const O: usize> Loss<O> for CrossEntropy {
         output
             .iter()
             .zip(target.iter())
-            .fold(0.0, |acc, (&o, t)| (o - sum.ln()).mul_add(-t, acc))
+            .fold(0.0, |acc, (&o, &t)| (sum.ln() - o).mul_add(t, acc))
     }
 }
 
