@@ -26,7 +26,7 @@ impl<const O: usize> Loss<O> for CrossEntropy {
             .iter_mut()
             .zip(target.iter())
             .fold(0.0, |acc, (o, t)| {
-                *o = *o / sum;
+                *o /= sum;
                 o.max(f32::EPSILON).log2().mul_add(-t, acc)
             })
     }

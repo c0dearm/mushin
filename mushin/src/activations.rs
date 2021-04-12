@@ -8,8 +8,6 @@ pub struct Nope;
 pub struct ReLu;
 #[derive(Debug)]
 pub struct Sigmoid;
-#[derive(Debug)]
-pub struct Softmax;
 
 impl Activation for Nope {
     fn activation(x: f32) -> f32 {
@@ -32,7 +30,7 @@ impl Activation for Sigmoid {
 #[cfg(test)]
 mod tests {
     use super::Activation;
-    use super::{Nope, ReLu, Sigmoid, Softmax};
+    use super::{Nope, ReLu, Sigmoid};
 
     #[test]
     fn nope_activation() {
