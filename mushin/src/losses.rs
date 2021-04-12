@@ -16,13 +16,13 @@ impl<const O: usize> Loss<O> for MeanSquaredError {
 }
 
 impl<const O: usize> Loss<O> for CrossEntropy {
-    fn loss(mut output: [f32; O], target: [f32; O]) -> f32 {
+    fn loss(output: [f32; O], target: [f32; O]) -> f32 {
         let sum = output.iter().map(|o| o.exp()).sum::<f32>();
 
         output
-            .iter_mut()
+            .iter()
             .zip(target.iter())
-            .fold(0.0, |acc, (o, t)| (*o - sum.ln()).mul_add(-t, acc))
+            .fold(0.0, |acc, (&o, t)| (o - sum.ln()).mul_add(-t, acc))
     }
 }
 
