@@ -1,5 +1,5 @@
-pub trait Activation<const O: usize> {
-    fn activation(x: &mut [f32; O]);
+pub trait Activation {
+    fn activation(x: f32) -> f32;
 }
 
 #[derive(Debug)]
@@ -11,30 +11,21 @@ pub struct Sigmoid;
 #[derive(Debug)]
 pub struct Softmax;
 
-impl<const O: usize> Activation<O> for Nope {
-    fn activation(_x: &mut [f32; O]) {}
-}
-
-impl<const O: usize> Activation<O> for ReLu {
-    fn activation(x: &mut [f32; O]) {
-        x.iter_mut().for_each(|x| *x = x.max(0.0));
+impl Activation for Nope {
+    fn activation(x: f32) -> f32 {
+        x
     }
 }
 
-impl<const O: usize> Activation<O> for Sigmoid {
-    fn activation(x: &mut [f32; O]) {
-        x.iter_mut().for_each(|x| *x = 1.0 / (1.0 + (-*x).exp()));
+impl Activation for ReLu {
+    fn activation(x: f32) -> f32 {
+        x.max(0.0)
     }
 }
 
-// TODO: I hate iterating twice, I wonder if it can be improved
-impl<const O: usize> Activation<O> for Softmax {
-    fn activation(x: &mut [f32; O]) {
-        let sum = x.iter_mut().fold(0.0, |acc, x| {
-            *x = x.exp();
-            acc + *x
-        });
-        x.iter_mut().for_each(|x| *x /= sum);
+impl Activation for Sigmoid {
+    fn activation(x: f32) -> f32 {
+        1.0 / (1.0 + (-x).exp())
     }
 }
 
@@ -45,29 +36,18 @@ mod tests {
 
     #[test]
     fn nope_activation() {
-        let mut x = [1.0];
-        Nope::activation(&mut x);
-        approx::assert_relative_eq!(x[..], [1.0]);
+        approx::assert_relative_eq!(Nope::activation(1.0), 1.0);
     }
 
     #[test]
     fn relu_activation() {
-        let mut x = [-1.0, 1.0];
-        ReLu::activation(&mut x);
-        approx::assert_relative_eq!(x[..], [0.0, 1.0]);
+        approx::assert_relative_eq!(ReLu::activation(-1.0), 0.0);
+        approx::assert_relative_eq!(ReLu::activation(1.0), 1.0);
     }
 
     #[test]
     fn sigmoid_activation() {
-        let mut x = [-1.0, 1.0];
-        Sigmoid::activation(&mut x);
-        approx::assert_relative_eq!(x[..], [0.26894143, 0.7310586]);
-    }
-
-    #[test]
-    fn softmax_activation() {
-        let mut x = [0.5, 0.9, 0.1];
-        Softmax::activation(&mut x);
-        approx::assert_relative_eq!(x[..], [0.31624106, 0.47177622, 0.21198273]);
+        approx::assert_relative_eq!(Sigmoid::activation(-1.0), 0.26894143);
+        approx::assert_relative_eq!(Sigmoid::activation(1.0), 0.7310586);
     }
 }
