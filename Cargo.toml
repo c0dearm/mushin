@@ -7,7 +7,7 @@ description = "Computational graphs with reverse automatic differentation in the
 homepage = "https://github.com/c0dearm/mushin"
 repository = "https://github.com/c0dearm/mushin"
 readme = "README.md"
-keywords = ["machine-learning", "automatic", "differentiation", "cuda", "opencl", "compute", "gpu", "cpu"]
+keywords = ["machine-learning", "automatic", "differentiation", "gpu", "cpu"]
 categories = ["algorithms", "mathematics", "science"]
 license = "MIT/Apache-2.0"
 
