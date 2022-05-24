@@ -1,4 +1,4 @@
-# Mushin: Compile-time creation of neural networks
+# Mushin: Automatic differentiation with type safe parallel computations
 
 [![CI](https://github.com/c0dearm/mushin/workflows/CI/badge.svg?branch=main)](https://github.com/c0dearm/mushin/actions)
 [![Security](https://github.com/c0dearm/mushin/workflows/Security/badge.svg?branch=main)](https://github.com/c0dearm/mushin/actions)
@@ -11,7 +11,7 @@
 
 ## Description
 
-**Mushin** is to `Rust` what `Tensorflow` is to `Python`. A library to build computational graphs and compute the gradients of the outputs with respect to a given set of variables using [reverse automatic differentatiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
+**Mushin** is to `Rust` what `Tensorflow` is to `Python`. A library to build computational graphs and compute the gradients of outputs with respect to a given set of variables using [reverse automatic differentatiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
 
 Internally it uses the [arrayfire](https://crates.io/crates/arrayfire) crate to provide parallel computations on specialized hardware, such as Nvidia CUDA GPUs, Intel MKL CPUs... For details on what devices are available and installation instructions for your OS, please checkout the `arrayfire` crate documentation. **The installation of the `arrayfire` binaries is required for `Mushin` to work.**
 
