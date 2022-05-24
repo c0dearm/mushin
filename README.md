@@ -11,85 +11,48 @@
 
 ## Description
 
-Mushin allows the developer to build neural networks at compile-time, with preallocated arrays with well defined sizes. This has mainly three very important benefits:
+**Mushin** is to `Rust` what `Tensorflow` is to `Python`. A library to build computational graphs and compute the gradients of the outputs with respect to a given set of variables using [reverse automatic differentatiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
 
-1. **Compile-time network consistency check**: Any defect in your neural network (i.e. mismatching layers inputs/outputs) will be raised at compile-time. You can enjoy your coffee while your network inference or training process never fails!
-2. **Awesome Rust compiler optimizations**: Because the neural network is completely defined at compile-time, the compiler is able
-to perform smart optimizations, like unrolling loops or injecting [SIMD](https://en.wikipedia.org/wiki/SIMD) instructions.
-3. **Support for embedded**: The `std` library is not required to build neural networks so it can run on any target that Rust supports.
+Internally it uses the [arrayfire](https://crates.io/crates/arrayfire) crate to provide parallel computations on specialized hardware, such as Nvidia CUDA GPUs, Intel MKL CPUs... For details on what devices are available and installation instructions for your OS, please checkout the `arrayfire` crate documentation. **The installation of the `arrayfire` binaries is required for `Mushin` to work.**
+
+One clear benefit of this crate versus `Tensorflow` is Rust's strong type system. All operations performed on tensors during the graph build are checked at compile time for mathematical soundness, which means no runtime error after an hour of model training. **If it compiles, it works**. If at some point while building your horribly nested computational graph you make a mistake on the shape of a tensor you'll be stopped before feeling stupid.
 
 ## Usage
 
-Add this to your `Cargo.toml`:
+First, install the arrayfire binaries as indicated by the [arrayfire](https://crates.io/crates/arrayfire) crate.
+
+Then, add **Mushin** as one of your dependencies:
 
 ```toml
 [dependencies]
-mushin = "0.1"
-mushin_derive = "0.1"
+mushin = "0.2"
 ```
 
-And this is a very simple example to get you started:
+The following is a self-explanatory example of the basic usage of **Mushin**, for more details, please check the crate [docs](https://docs.rs/mushin/latest/mushin/).
 
 ```rust
-use rand::distributions::Uniform;
-
-use mushin::{activations::ReLu, layers::Dense, NeuralNetwork};
-use mushin_derive::NeuralNetwork;
-
-// Builds a neural network with 2 inputs and 1 output
-// Made of 3 feed forward layers, you can have as many as you want and with any name
-#[derive(NeuralNetwork, Debug)]
-struct MyNetwork {
-    // LayerType<ActivationType, # inputs, # outputs>
-    input: Dense<ReLu, 2, 4>,
-    hidden: Dense<ReLu, 4, 2>,
-    output: Dense<ReLu, 2, 1>,
-}
-
-impl MyNetwork {
-    // Initialize layer weights with a uniform distribution and set ReLU as activation function
-    fn new() -> Self {
-        let mut rng = rand::thread_rng();
-        let dist = Uniform::from(-1.0..=1.0);
-
-        MyNetwork {
-            input: Dense::random(&mut rng, &dist),
-            hidden: Dense::random(&mut rng, &dist),
-            output: Dense::random(&mut rng, &dist),
-        }
-    }
-}
+use mushin::{Context, Values, Class, Gradients, add, matmul};
 
 fn main() {
-    // Init the weights and perform a forward pass
-    let nn = MyNetwork::new();
-    println!("{:#?}", nn);
+    let ctx = Context::new();
 
-    let input = [0.0, 1.0];
-    println!("Input: {:#?}", input);
-    let output = nn.forward(input);
-    println!("Output: {:#?}", output);
+    let x = ctx.tensor::<1, 1, 2, 3>(Values::Eye(3.0), Class::Constant);
+    let w = ctx.tensor::<1, 1, 3, 2>(Values::Normal, Class::Persistent("weights"));
+    let b = ctx.tensor::<1, 1, 3, 3>(Values::Fill(0.0), Class::Persistent("bias"));
+    let z = add(&b, &matmul(&w, &x));
+
+    let grads = Gradients::compute(&z);
+    let dz_dw = grads.wrt(&w);
+    let dz_db = grads.wrt(&b);
 }
 ```
-
-You may wonder how the `forward` method works. The `NeuralNetwork` derive macro defines it for you, and it looks like this for this particular example:
-
-```rust
-fn forward(&self, input: [f32; 2]) -> [f32; 1] {
-    self.output.forward(self.hidden.forward(self.input.forward[input]))
-}
-```
-
-Note how the forward method expects two input values because that's what the first (`input`) layer expects, and returns one single value because that's what the last layer (`output`) returns.
 
 ## Roadmap
 
-- [x] Compile-time neural network consistency check
-- [x] Docs, CI/CD & Benchmarks
-- [ ] Backward pass
-- [ ] More layer types (convolution, dropout, lstm...)
-- [ ] More activation functions (sigmoid, softmax...)
-- [ ] Maaaybeee, CPU and/or GPU concurrency
+- [ ] Add more operations
+- [ ] Allow for higher-order gradients
+- [ ] Add benchmarks
+- [ ] Add a cargo feature for deep learning, which adds layers, losses and activation functions (like `Keras`)
 
 ## Contributing
 

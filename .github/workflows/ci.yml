@@ -1,4 +1,4 @@
-on: [push, pull_request]
+on: [push]
 name: CI
 
 jobs:
@@ -25,6 +25,8 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      AF_VER: 3.8.0
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -36,11 +38,35 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Cache ArrayFire
+        uses: actions/cache@v1
+        id: arrayfire
+        with:
+            path: afbin
+            key: ${{ runner.os }}-af-${{ env.AF_VER }}
+
+      - name: Download ArrayFire
+        # Only download and cache arrayfire if already not found
+        if: steps.arrayfire.outputs.cache-hit != 'true'
+        run: |
+          wget --quiet http://arrayfire.s3.amazonaws.com/${AF_VER}/ArrayFire-v${AF_VER}_Linux_x86_64.sh
+          chmod +x ./ArrayFire-v${AF_VER}_Linux_x86_64.sh
+          mkdir afbin
+          ./ArrayFire-v${AF_VER}_Linux_x86_64.sh --skip-license --exclude-subdir --prefix=./afbin
+          rm ./afbin/lib64/libcu*.so*
+          rm ./afbin/lib64/libafcuda*.so*
+          rm ./ArrayFire-v${AF_VER}_Linux_x86_64.sh
+
+      - name: Export ArrayFire paths
+        run: |
+          echo "AF_PATH=${GITHUB_WORKSPACE}/afbin" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${GITHUB_WORKSPACE}/afbin/lib64" >> $GITHUB_ENV
+
       - name: Run cargo test
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all
+          args: --all-features
 
   lints:
     name: Lints
@@ -67,11 +93,13 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all --all-features -- -D warnings
+          args: --all-features -- -D warnings
 
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    env:
+      AF_VER: 3.8.0
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -83,10 +111,34 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Cache ArrayFire
+        uses: actions/cache@v1
+        id: arrayfire
+        with:
+            path: afbin
+            key: ${{ runner.os }}-af-${{ env.AF_VER }}
+
+      - name: Download ArrayFire
+        # Only download and cache arrayfire if already not found
+        if: steps.arrayfire.outputs.cache-hit != 'true'
+        run: |
+          wget --quiet http://arrayfire.s3.amazonaws.com/${AF_VER}/ArrayFire-v${AF_VER}_Linux_x86_64.sh
+          chmod +x ./ArrayFire-v${AF_VER}_Linux_x86_64.sh
+          mkdir afbin
+          ./ArrayFire-v${AF_VER}_Linux_x86_64.sh --skip-license --exclude-subdir --prefix=./afbin
+          rm ./afbin/lib64/libcu*.so*
+          rm ./afbin/lib64/libafcuda*.so*
+          rm ./ArrayFire-v${AF_VER}_Linux_x86_64.sh
+
+      - name: Export ArrayFire paths
+        run: |
+          echo "AF_PATH=${GITHUB_WORKSPACE}/afbin" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${GITHUB_WORKSPACE}/afbin/lib64" >> $GITHUB_ENV
+
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         with:
-          args: '--exclude-files example mushin_derive -- --test-threads 1'
+          args: '-- --test-threads 1'
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v1
