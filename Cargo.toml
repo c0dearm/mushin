@@ -1,6 +1,19 @@
-[workspace]
-members = [
-    "mushin",
-    "mushin_derive",
-    "example",
-]
+[package]
+name = "mushin"
+version = "0.2.0"
+authors = ["Aitor Ruano <codearm@pm.me>"]
+edition = "2021"
+description = "Computational graphs with reverse automatic differentation in the GPU"
+homepage = "https://github.com/c0dearm/mushin"
+repository = "https://github.com/c0dearm/mushin"
+readme = "README.md"
+keywords = ["machine-learning", "automatic", "differentiation", "cuda", "opencl", "compute", "gpu", "cpu"]
+categories = ["algorithms", "mathematics", "science"]
+license = "MIT/Apache-2.0"
+
+[badges]
+maintenance = { status = "actively-developed" }
+codecov = { repository = "c0dearm/mushin" }
+
+[dependencies]
+arrayfire = "3.8"
