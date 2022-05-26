@@ -26,11 +26,11 @@
 //!
 //! Once we have our context, we can start declaring tensors and use them in our operations:
 //! ```rust
-//! # use mushin::{Context, Values, Class, add, matmul};
+//! # use mushin::{Context, Values, add, matmul};
 //! # let ctx = Context::new();
-//! let x = ctx.tensor::<1, 1, 2, 3>(Values::Eye(3.0), Class::Constant);
-//! let w = ctx.tensor::<1, 1, 3, 2>(Values::Normal, Class::Persistent("weights"));
-//! let b = ctx.tensor::<1, 1, 3, 3>(Values::Fill(0.0), Class::Persistent("bias"));
+//! let x = ctx.constant::<1, 1, 2, 3>(Values::Eye(3.0));
+//! let w = ctx.variable::<1, 1, 3, 2>(Values::Normal, Some("weights"));
+//! let b = ctx.variable::<1, 1, 3, 3>(Values::Fill(0.0), Some("bias"));
 //! let z = add(&b, &matmul(&w, &x));
 //! ```
 //! The code above is an example of a perceptron neural network layer, where we have an input (`x`)
@@ -39,11 +39,11 @@
 //! library, we are now of course interested on the gradients of the output with respect to the graph
 //! variables, which are obtained as follows:
 //! ```rust
-//! # use mushin::{Context, Gradients, Values, Class};
+//! # use mushin::{Context, Gradients, Values};
 //! # let ctx = Context::new();
-//! # let z = ctx.tensor::<1, 1, 1, 1>(Values::Identity, Class::Constant);
-//! # let w = ctx.tensor::<1, 1, 1, 1>(Values::Identity, Class::Constant);
-//! # let b = ctx.tensor::<1, 1, 1, 1>(Values::Identity, Class::Constant);
+//! # let z = ctx.variable::<1, 1, 1, 1>(Values::Identity, None);
+//! # let w = ctx.variable::<1, 1, 1, 1>(Values::Identity, None);
+//! # let b = ctx.variable::<1, 1, 1, 1>(Values::Identity, None);
 //! let grads = Gradients::compute(&z);
 //! let dz_dw = grads.wrt(&w);
 //! let dz_db = grads.wrt(&b);
@@ -59,6 +59,7 @@
     clippy::shadow_unrelated,
     clippy::missing_inline_in_public_items
 )]
+
 mod context;
 mod gradient;
 mod ops;
@@ -66,5 +67,5 @@ mod tensor;
 
 pub use context::Context;
 pub use gradient::Gradients;
-pub use ops::{add, div, matmul, multiply, pow, sin, sub, sum};
-pub use tensor::{Class, Values};
+pub use ops::{add, div, matmul, mul, pow, sin, sub, sum};
+pub use tensor::Values;

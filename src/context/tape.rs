@@ -1,31 +1,53 @@
 use std::cell::{Ref, RefCell};
 
-use crate::context::function::Function;
+use super::function::{
+    DoubleParamReverseFn, DoubleParameter, Function, SingleParamReverseFn, VariableParameter,
+};
 
-/// Tape (or Wengert list) that keeps track of all the expressions evaluated since its declaration (a computation graph).
-/// Used by the `Context`
+/// Tape (or Wengert list) that keeps track of all the functions evaluated within the `Context` (a computation graph).
 pub struct Tape(RefCell<Vec<Function>>);
 
+/// Index of a node (function) in the `Tape`
+pub type NodeId = usize;
+
 impl Tape {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self(RefCell::new(Vec::new()))
     }
 
-    pub(crate) fn reset(&self) {
+    /// Restart the computation graph from scratch
+    pub fn reset(&self) {
         self.0.borrow_mut().clear();
     }
 
-    pub(crate) fn functions(&self) -> Ref<Vec<Function>> {
+    pub fn functions(&self) -> Ref<Vec<Function>> {
         self.0.borrow()
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.0.borrow().len()
+    pub fn len(&self) -> usize {
+        self.functions().len()
     }
 
-    pub(crate) fn push_function(&self, function: Function) -> usize {
-        let index = self.functions().len();
-        self.0.borrow_mut().push(function);
+    /// Push a new variable declaration into the computation graph
+    pub fn push_nary(&self) -> NodeId {
+        let index = self.len();
+        self.0.borrow_mut().push(Function::Nary);
+        index
+    }
+
+    /// Push a single parameter function into the computation graph
+    pub fn push_unary(&self, param: VariableParameter, reverse: SingleParamReverseFn) -> NodeId {
+        let index = self.len();
+        self.0.borrow_mut().push(Function::Unary { param, reverse });
+        index
+    }
+
+    /// Push a double parameter function into the computation graph
+    pub fn push_binary(&self, params: DoubleParameter, reverse: DoubleParamReverseFn) -> NodeId {
+        let index = self.len();
+        self.0
+            .borrow_mut()
+            .push(Function::Binary { params, reverse });
         index
     }
 }

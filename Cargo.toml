@@ -1,6 +1,6 @@
 [package]
 name = "mushin"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Aitor Ruano <codearm@pm.me>"]
 edition = "2021"
 description = "Computational graphs with reverse automatic differentation in the GPU"
