@@ -1,18 +1,13 @@
 pub mod function;
 mod storage;
-mod tape;
+pub mod tape;
 
-use std::cell::Ref;
+use crate::tensor::{Constant, Values, Variable};
 
-use arrayfire::{constant, dim4, identity, randn, randu};
-
-use crate::tensor::{Class, Origin, Tensor, Values};
-
-use function::Function;
 use storage::Storage;
 use tape::Tape;
 
-/// Stores the computation graph (tape) of functions and persistent values thorugh different tape builds
+/// Stores the computation graph and variable values that persist through different tape builds
 pub struct Context {
     storage: Storage,
     tape: Tape,
@@ -35,48 +30,28 @@ impl Context {
         self.tape.reset();
     }
 
-    /// Creates a new tensor in the computation graph with the given parameters
+    /// Creates a new constant tensor
+    #[must_use]
     #[inline]
-    pub fn tensor<const B: u64, const L: u64, const R: u64, const C: u64>(
+    #[allow(clippy::unused_self)]
+    pub fn constant<const B: u64, const L: u64, const R: u64, const C: u64>(
         &self,
         values: Values,
-        class: Class,
-    ) -> Tensor<B, L, R, C> {
-        let gen_values = |v| match v {
-            Values::Identity => identity(dim4!(R, C, L, B)),
-            Values::Uniform => randu!(R, C, L, B),
-            Values::Normal => randn!(R, C, L, B),
-            Values::Eye(x) => identity::<f32>(dim4!(R, C, L, B)) * x,
-            Values::Fill(x) => constant!(x; R, C, L, B),
-        };
+    ) -> Constant<B, L, R, C> {
+        Constant::new(values)
+    }
 
-        match class {
-            Class::Constant => Tensor::new(gen_values(values), Origin::None, self),
-            Class::Variable => Tensor::new(
-                gen_values(values),
-                Origin::Function(self.tape.push_function(Function::Nary)),
-                self,
-            ),
-            Class::Persistent(key) => {
-                let function = self.tape.push_function(Function::Nary);
-                let value = self
-                    .storage
-                    .get_or_create(key, gen_values, values, function);
-                Tensor::new(value, Origin::Function(function), self)
-            }
+    /// Creates a new variable tensor, contributing to the computation graph
+    #[inline]
+    pub fn variable<'t, const B: u64, const L: u64, const R: u64, const C: u64>(
+        &'t self,
+        mut values: Values,
+        name: Option<&'static str>,
+    ) -> Variable<'t, B, L, R, C> {
+        if let Some(key) = name {
+            values = self.storage.get_or_create::<B, L, R, C>(key, values).into();
         }
-    }
-
-    pub(crate) fn functions(&self) -> Ref<Vec<Function>> {
-        self.tape.functions()
-    }
-
-    pub(crate) fn push_function(&self, function: Function) -> usize {
-        self.tape.push_function(function)
-    }
-
-    pub(crate) fn tape_len(&self) -> usize {
-        self.tape.len()
+        Variable::new(values, &self.tape)
     }
 }
 

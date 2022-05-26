@@ -1,191 +1,62 @@
 use arrayfire::Array;
 
-use crate::tensor::{Origin, Tensor};
+use super::tape::NodeId;
 
-/// Represents an argument to a function and its value comes from a variable tensor
-pub struct VariableArg {
-    value: Array<f32>,
-    function: usize,
+/// Represents a variable single parameter
+pub struct VariableParameter {
+    pub value: Array<f32>,
+    pub index: NodeId,
 }
 
-/// Represents an argument to a function but its value comes from a constant tensor
-pub struct ConstantArg {
-    value: Array<f32>,
-}
-
-/// Represents the arguments of a function with two arguments
-pub enum DoubleArg {
-    /// Both arguments are variables
-    BothVariables(VariableArg, VariableArg),
-    /// First argument is a constant, second is a variable
-    ConstFirstArg(ConstantArg, VariableArg),
-    /// First argument is a variable, second is a constant
-    ConstSecondArg(VariableArg, ConstantArg),
-}
-
-impl DoubleArg {
-    const fn values(&self) -> (Option<usize>, &Array<f32>, Option<usize>, &Array<f32>) {
-        match *self {
-            Self::BothVariables(
-                VariableArg {
-                    value: ref a,
-                    function: fa,
-                },
-                VariableArg {
-                    value: ref b,
-                    function: fb,
-                },
-            ) => (Some(fa), a, Some(fb), b),
-            Self::ConstFirstArg(
-                ConstantArg { value: ref a },
-                VariableArg {
-                    value: ref b,
-                    function: fb,
-                },
-            ) => (None, a, Some(fb), b),
-            Self::ConstSecondArg(
-                VariableArg {
-                    value: ref a,
-                    function: fa,
-                },
-                ConstantArg { value: ref b },
-            ) => (Some(fa), a, None, b),
-        }
+impl VariableParameter {
+    pub fn new(value: Array<f32>, index: NodeId) -> Self {
+        Self { value, index }
     }
 }
 
-/// Type of the function performing the reverse pass on a single argument function
-type OneArgBackwardFn = fn(df: &Array<f32>, arg: &Array<f32>) -> Array<f32>;
-/// Type of the function performing the reverse pass on a double argument function
-type TwoArgsBackwardFn =
-    fn(df: &Array<f32>, arg_a: &Array<f32>, arg_b: &Array<f32>) -> (Array<f32>, Array<f32>);
-
-/// `f(x) = cos(x)` if x is a variable
-pub struct OneArg {
-    arg: VariableArg,
-    backward: OneArgBackwardFn,
+/// Represents a single constant parameter
+pub struct ConstantParameter {
+    pub value: Array<f32>,
 }
 
-impl OneArg {
-    pub(crate) fn backward(&self, df: &Array<f32>) -> (usize, Array<f32>) {
-        (self.arg.function, (self.backward)(df, &self.arg.value))
+impl ConstantParameter {
+    pub fn new(value: Array<f32>) -> Self {
+        Self { value }
     }
 }
 
-/// `f(x, y) = x * y` if at least one of them is a variable
-pub struct TwoArgs {
-    args: DoubleArg,
-    backward: TwoArgsBackwardFn,
+/// Represents the possible combination of parameters for a binary function.
+/// Note that binary functions with both constant parameters are not considered for the computation graph
+/// because the result is also a constant and by definition it doesn't have a derivative
+pub enum DoubleParameter {
+    /// First parameters is a variable and second parameter is a constant
+    VariableConstant(VariableParameter, ConstantParameter),
+    /// First parameters is a constant and second parameter is a variable
+    ConstantVariable(ConstantParameter, VariableParameter),
+    /// Both parameters are variables
+    VariableVariable(VariableParameter, VariableParameter),
 }
 
-impl TwoArgs {
-    pub(crate) fn backward(
-        &self,
-        df: &Array<f32>,
-    ) -> (Option<usize>, Array<f32>, Option<usize>, Array<f32>) {
-        let (f_a, arg_a, f_b, arg_b) = self.args.values();
-        let (partial_a, partial_b) = (self.backward)(df, arg_a, arg_b);
-        (f_a, partial_a, f_b, partial_b)
-    }
-}
+/// Compute the derivative of a unary function with respect to its parameter (using the reverse chain rule `df(z)/dx = (df/dz)(dz/dx)`)
+pub type SingleParamReverseFn = fn(&Array<f32>, &Array<f32>) -> Array<f32>;
+/// Compute the derivative of a binary function with respect to each of its parameters (using the reverse chain rule `df(z,w)/dx = [(df/dz)(dz/dx), (df/dw)(dw/dx)]`)
+pub type DoubleParamReverseFn =
+    fn(&Array<f32>, &Array<f32>, &Array<f32>) -> (Array<f32>, Array<f32>);
 
-/// Represents a node in the computation graph.
+/// Represents a node in the computation graph. Only functions whose result is a variable
+/// are considered and introduced to the computation graph, derivatives of constants
+/// or with respect to constants are mathematically undefined
 pub enum Function {
-    /// A variable declaration (constants are ignored)
+    // A variable declaration
     Nary,
-    /// A function with only one arg (constants are ignored), like `cos(x)`
-    Unary(OneArg),
-    /// A function with two args if at least one of them is a variable, like `x * y`
-    Binary(TwoArgs),
-}
-
-impl Function {
-    /// Creates a single argument function and pushes it to the tape, if the argument is a variable
-    /// Returns a new tensor origin with a reference to the newly created function
-    pub(crate) fn unary<const B: u64, const L: u64, const R: u64, const C: u64>(
-        arg: &Tensor<B, L, R, C>,
-        backward: OneArgBackwardFn,
-    ) -> Origin {
-        if let &Origin::Function(function) = arg.origin() {
-            let function = Self::Unary(OneArg {
-                arg: VariableArg {
-                    value: arg.into(),
-                    function,
-                },
-                backward,
-            });
-            Origin::Function(arg.context().push_function(function))
-        } else {
-            // Single argument function applied to a constant is a constant
-            Origin::None
-        }
-    }
-
-    /// Creates a double argument function and pushes it to the tape, if at least one of the arguments is a variable
-    /// Returns a new tensor origin with a reference to the newly created function
-    pub(crate) fn binary<
-        const XB: u64,
-        const XN: u64,
-        const XR: u64,
-        const XC: u64,
-        const YB: u64,
-        const YN: u64,
-        const YR: u64,
-        const YC: u64,
-    >(
-        arg_a: &Tensor<XB, XN, XR, XC>,
-        arg_b: &Tensor<YB, YN, YR, YC>,
-        backward: TwoArgsBackwardFn,
-    ) -> Origin {
-        match (arg_a.origin(), arg_b.origin()) {
-            // If both arguments are a constant, result is a constant
-            (&Origin::None, &Origin::None) => Origin::None,
-            (&Origin::Function(function), &Origin::None) => {
-                let function = Self::Binary(TwoArgs {
-                    args: DoubleArg::ConstSecondArg(
-                        VariableArg {
-                            value: arg_a.into(),
-                            function,
-                        },
-                        ConstantArg {
-                            value: arg_b.into(),
-                        },
-                    ),
-                    backward,
-                });
-                Origin::Function(arg_a.context().push_function(function))
-            }
-            (&Origin::None, &Origin::Function(function)) => {
-                let function = Self::Binary(TwoArgs {
-                    args: DoubleArg::ConstFirstArg(
-                        ConstantArg {
-                            value: arg_a.into(),
-                        },
-                        VariableArg {
-                            value: arg_b.into(),
-                            function,
-                        },
-                    ),
-                    backward,
-                });
-                Origin::Function(arg_b.context().push_function(function))
-            }
-            (&Origin::Function(function_a), &Origin::Function(function_b)) => {
-                let function = Self::Binary(TwoArgs {
-                    args: DoubleArg::BothVariables(
-                        VariableArg {
-                            value: arg_a.into(),
-                            function: function_a,
-                        },
-                        VariableArg {
-                            value: arg_b.into(),
-                            function: function_b,
-                        },
-                    ),
-                    backward,
-                });
-                Origin::Function(arg_a.context().push_function(function))
-            }
-        }
-    }
+    // A function with a single variable parameter, like `f(x) = cos(x)`
+    Unary {
+        param: VariableParameter,
+        reverse: SingleParamReverseFn,
+    },
+    // A function with two parameters where at least one of them is a variable, like `f(x,y) = x * y`
+    Binary {
+        params: DoubleParameter,
+        reverse: DoubleParamReverseFn,
+    },
 }

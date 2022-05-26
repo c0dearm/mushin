@@ -1,15 +1,13 @@
-use arrayfire::Array;
+use arrayfire::{constant, dim4, identity, randn, randu, Array};
 
-use crate::Context;
+use crate::context::{
+    function::{
+        ConstantParameter, DoubleParamReverseFn, DoubleParameter, SingleParamReverseFn,
+        VariableParameter,
+    },
+    tape::{NodeId, Tape},
+};
 
-/// Origin of a tensor. Either it came from a function (a variable) or it is a constant
-#[non_exhaustive]
-pub enum Origin {
-    /// The value is a constant and originated from a constant function (not inserted in the tape)
-    None,
-    /// The value is a variable and originated from a function with given index in the tape
-    Function(usize),
-}
 /// Possible pre-defined values to create a tensor from
 #[non_exhaustive]
 pub enum Values {
@@ -19,87 +17,302 @@ pub enum Values {
     Uniform,
     /// Values come from a normal distribution
     Normal,
-    /// Tensor with all values zero except for the main diagonal
+    /// All values zero except for the main diagonal
     Eye(f32),
-    /// Tensor with all values set to the given value
+    /// All values set to the given value
     Fill(f32),
+    /// Custom values
+    Custom(Array<f32>),
 }
 
-/// The class of a tensor defines if its value matters for the computation graph
-#[non_exhaustive]
-#[derive(Clone, Copy)]
-pub enum Class {
-    /// Tensor is a constant so the value is not added to the computation graph (constants don't compute derivatives)
-    Constant,
-    /// Tensor is a variable and the value is added to the computation graph, the value does not persist through different builds
-    Variable,
-    /// Tensor is a variable and the value is added to the computation graph, that does persist through different builds.
-    /// The given string is a key to retrieve the value from the persistent storage.
-    Persistent(&'static str),
+impl From<Array<f32>> for Values {
+    #[inline]
+    fn from(a: Array<f32>) -> Self {
+        Self::Custom(a)
+    }
 }
 
-/// A mathematical tensor with a reference to its origin in the computation graph
-pub struct Tensor<'ctx, const B: u64, const L: u64, const R: u64, const C: u64> {
+/// A tensor which is considered a constant (doesn't contribute to the computation graph)
+pub struct Constant<const B: u64, const L: u64, const R: u64, const C: u64> {
+    /// Holds the tensor values
     value: Array<f32>,
-    context: &'ctx Context,
-    origin: Origin,
 }
 
-impl<'ctx, const B: u64, const L: u64, const R: u64, const C: u64> Tensor<'ctx, B, L, R, C> {
-    pub(crate) fn new(value: Array<f32>, origin: Origin, context: &'ctx Context) -> Self {
-        Tensor {
-            value,
-            context,
-            origin,
+impl<const B: u64, const L: u64, const R: u64, const C: u64> Constant<B, L, R, C> {
+    pub fn new(values: Values) -> Self {
+        Self {
+            value: Self::gen_value(values),
+        }
+    }
+}
+
+/// A tensor which is considered a variable (contributes to the computation graph)
+pub struct Variable<'t, const B: u64, const L: u64, const R: u64, const C: u64> {
+    /// Holds the tensor values
+    value: Array<f32>,
+    /// The computation graph
+    tape: &'t Tape,
+    /// Index to the node in the computation graph
+    index: NodeId,
+}
+
+impl<'t, const B: u64, const L: u64, const R: u64, const C: u64> Variable<'t, B, L, R, C> {
+    pub fn new(values: Values, tape: &'t Tape) -> Self {
+        Self {
+            value: Self::gen_value(values),
+            tape,
+            index: tape.push_nary(),
         }
     }
 
-    pub(crate) const fn context(&self) -> &Context {
-        self.context
+    pub const fn tape(&self) -> &Tape {
+        self.tape
     }
 
-    pub(crate) const fn origin(&self) -> &Origin {
-        &self.origin
-    }
-}
-
-impl<'tsr, const B: u64, const L: u64, const R: u64, const C: u64>
-    From<&'tsr Tensor<'_, B, L, R, C>> for &'tsr Array<f32>
-{
-    #[inline]
-    fn from(t: &'tsr Tensor<'_, B, L, R, C>) -> Self {
-        &t.value
+    pub const fn index(&self) -> NodeId {
+        self.index
     }
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> From<&Tensor<'_, B, L, R, C>>
-    for Array<f32>
-{
-    #[inline]
-    fn from(t: &Tensor<'_, B, L, R, C>) -> Self {
-        t.value.clone()
+/// Represents a pair of tensors. Used to implement the `BinaryOp` trait on it
+pub struct Pair<'a, X, Y>(pub &'a X, pub &'a Y);
+
+/// Common trait for both `Constant` and `Variable` tensors
+pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64> {
+    fn value(&self) -> &Array<f32>;
+
+    /// Return an `Array` with the same shape as the `Tensor` filled with the provided `Values`
+    fn gen_value(values: Values) -> Array<f32> {
+        match values {
+            Values::Identity => identity(dim4!(R, C, L, B)),
+            Values::Uniform => randu!(R, C, L, B),
+            Values::Normal => randn!(R, C, L, B),
+            Values::Eye(x) => identity::<f32>(dim4!(R, C, L, B)) * x,
+            Values::Fill(x) => constant!(x; R, C, L, B),
+            Values::Custom(x) => x,
+        }
     }
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> From<Tensor<'_, B, L, R, C>>
-    for Array<f32>
+/// Trait to apply a forward function on a tensor value and push the reverse function into the computation graph
+pub trait UnaryOp<Y> {
+    fn eval<F: Fn(&Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        reverse: SingleParamReverseFn,
+    ) -> Y;
+}
+
+/// Trait to apply a forward function on a pair of tensor values and push the reverse function into the computation graph
+pub trait BinaryOp<Z> {
+    fn eval<F: Fn(&Array<f32>, &Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        reverse: DoubleParamReverseFn,
+    ) -> Z;
+}
+
+impl<const B: u64, const L: u64, const R: u64, const C: u64> Tensor<B, L, R, C>
+    for Constant<B, L, R, C>
 {
-    #[inline]
-    fn from(t: Tensor<'_, B, L, R, C>) -> Self {
-        t.value
+    fn value(&self) -> &Array<f32> {
+        &self.value
     }
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> TryFrom<&Tensor<'_, B, L, R, C>>
-    for usize
+impl<const B: u64, const L: u64, const R: u64, const C: u64> Tensor<B, L, R, C>
+    for Variable<'_, B, L, R, C>
 {
-    type Error = ();
+    fn value(&self) -> &Array<f32> {
+        &self.value
+    }
+}
 
-    #[inline]
-    fn try_from(t: &Tensor<B, L, R, C>) -> Result<Self, Self::Error> {
-        match t.origin {
-            Origin::Function(function) => Ok(function),
-            Origin::None => Err(()),
+impl<const B: u64, const L: u64, const R: u64, const C: u64> From<&Variable<'_, B, L, R, C>>
+    for VariableParameter
+{
+    fn from(x: &Variable<'_, B, L, R, C>) -> Self {
+        Self::new(x.value.clone(), x.index)
+    }
+}
+
+impl<const B: u64, const L: u64, const R: u64, const C: u64> From<&Constant<B, L, R, C>>
+    for ConstantParameter
+{
+    fn from(x: &Constant<B, L, R, C>) -> Self {
+        Self::new(x.value.clone())
+    }
+}
+
+impl<
+        const XB: u64,
+        const XL: u64,
+        const XR: u64,
+        const XC: u64,
+        const YB: u64,
+        const YL: u64,
+        const YR: u64,
+        const YC: u64,
+    > UnaryOp<Constant<YB, YL, YR, YC>> for Constant<XB, XL, XR, XC>
+{
+    fn eval<F: Fn(&Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        _reverse: SingleParamReverseFn,
+    ) -> Constant<YB, YL, YR, YC> {
+        Constant {
+            value: forward(&self.value),
+        }
+    }
+}
+
+impl<
+        't,
+        const XB: u64,
+        const XL: u64,
+        const XR: u64,
+        const XC: u64,
+        const YB: u64,
+        const YL: u64,
+        const YR: u64,
+        const YC: u64,
+    > UnaryOp<Variable<'t, YB, YL, YR, YC>> for Variable<'t, XB, XL, XR, XC>
+{
+    fn eval<F: Fn(&Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        reverse: SingleParamReverseFn,
+    ) -> Variable<'t, YB, YL, YR, YC> {
+        Variable {
+            value: forward(&self.value),
+            tape: self.tape,
+            index: self.tape.push_unary(self.into(), reverse),
+        }
+    }
+}
+
+impl<
+        const XB: u64,
+        const XL: u64,
+        const XR: u64,
+        const XC: u64,
+        const YB: u64,
+        const YL: u64,
+        const YR: u64,
+        const YC: u64,
+        const ZB: u64,
+        const ZL: u64,
+        const ZR: u64,
+        const ZC: u64,
+    > BinaryOp<Constant<ZB, ZL, ZR, ZC>>
+    for Pair<'_, Constant<XB, XL, XR, XC>, Constant<YB, YL, YR, YC>>
+{
+    fn eval<F: Fn(&Array<f32>, &Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        _reverse: DoubleParamReverseFn,
+    ) -> Constant<ZB, ZL, ZR, ZC> {
+        Constant {
+            value: forward(&self.0.value, &self.1.value),
+        }
+    }
+}
+
+impl<
+        't,
+        const XB: u64,
+        const XL: u64,
+        const XR: u64,
+        const XC: u64,
+        const YB: u64,
+        const YL: u64,
+        const YR: u64,
+        const YC: u64,
+        const ZB: u64,
+        const ZL: u64,
+        const ZR: u64,
+        const ZC: u64,
+    > BinaryOp<Variable<'t, ZB, ZL, ZR, ZC>>
+    for Pair<'_, Constant<XB, XL, XR, XC>, Variable<'t, YB, YL, YR, YC>>
+{
+    fn eval<F: Fn(&Array<f32>, &Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        reverse: DoubleParamReverseFn,
+    ) -> Variable<'t, ZB, ZL, ZR, ZC> {
+        Variable {
+            value: forward(&self.0.value, &self.1.value),
+            tape: self.1.tape,
+            index: self.1.tape.push_binary(
+                DoubleParameter::ConstantVariable(self.0.into(), self.1.into()),
+                reverse,
+            ),
+        }
+    }
+}
+
+impl<
+        't,
+        const XB: u64,
+        const XL: u64,
+        const XR: u64,
+        const XC: u64,
+        const YB: u64,
+        const YL: u64,
+        const YR: u64,
+        const YC: u64,
+        const ZB: u64,
+        const ZL: u64,
+        const ZR: u64,
+        const ZC: u64,
+    > BinaryOp<Variable<'t, ZB, ZL, ZR, ZC>>
+    for Pair<'_, Variable<'t, XB, XL, XR, XC>, Constant<YB, YL, YR, YC>>
+{
+    fn eval<F: Fn(&Array<f32>, &Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        reverse: DoubleParamReverseFn,
+    ) -> Variable<'t, ZB, ZL, ZR, ZC> {
+        Variable {
+            value: forward(&self.0.value, &self.1.value),
+            tape: self.0.tape,
+            index: self.0.tape.push_binary(
+                DoubleParameter::VariableConstant(self.0.into(), self.1.into()),
+                reverse,
+            ),
+        }
+    }
+}
+
+impl<
+        't,
+        const XB: u64,
+        const XL: u64,
+        const XR: u64,
+        const XC: u64,
+        const YB: u64,
+        const YL: u64,
+        const YR: u64,
+        const YC: u64,
+        const ZB: u64,
+        const ZL: u64,
+        const ZR: u64,
+        const ZC: u64,
+    > BinaryOp<Variable<'t, ZB, ZL, ZR, ZC>>
+    for Pair<'_, Variable<'t, XB, XL, XR, XC>, Variable<'t, YB, YL, YR, YC>>
+{
+    fn eval<F: Fn(&Array<f32>, &Array<f32>) -> Array<f32>>(
+        &self,
+        forward: F,
+        reverse: DoubleParamReverseFn,
+    ) -> Variable<'t, ZB, ZL, ZR, ZC> {
+        Variable {
+            value: forward(&self.0.value, &self.1.value),
+            tape: self.0.tape,
+            index: self.0.tape.push_binary(
+                DoubleParameter::VariableVariable(self.0.into(), self.1.into()),
+                reverse,
+            ),
         }
     }
 }
