@@ -1,4 +1,4 @@
-# [![Mushin](assets/mushin-logo.svg)](https://github.com/c0dearm/mushin)
+# [![Mushin](assets/mushin-logo.png)](https://github.com/c0dearm/mushin)
 
 [![Crates](https://img.shields.io/crates/v/mushin.svg)](https://crates.io/crates/mushin)
 [![Crates](https://img.shields.io/crates/d/mushin.svg)](https://crates.io/crates/mushin)
