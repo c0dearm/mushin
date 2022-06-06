@@ -1,8 +1,9 @@
 //! # Mushin
 //!
-//! Mushin is a library for computing gradients on computational graphs using
-//! reverse automatic differentiation. In other words, what Tensorflow is to
-//! Python is what Mushin is to Rust.
+//! **Mushin** is a pure `Rust`, no-unsafe library for computing gradients on dynamic
+//! computational graphs using
+//! [reverse automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
+//! In other words, what `PyTorch` is to `Python` is what `Mushin` is to `Rust`.
 //!
 //! All the operations on tensors use the excellent [arrayfire](https://arrayfire.com/)
 //! library as a backend. Which means **Mushin can perform computations on any device**
@@ -10,46 +11,40 @@
 //! compile time for mathematical correctness. I.e. You won't be able to add two tensors
 //! of different shape/dimensions. The shape of the resulting tensors for all your
 //! operations is tracked through the computation graph so in that regard we can offer
-//! a guarantee that Tensorflow can't: **If it compiles, your computation graph is
-//! guaranteed to be correct**
+//! a guarantee that `Tensorflow` or `PyTorch` can't: **If it compiles, your computation
+//! graph is guaranteed to be correct**
 //!
 //! ## Usage
-//!
-//! All computational graphs start with a new context:
 //! ```rust
-//! # use mushin::Context;
-//! let ctx = Context::new();
-//! ```
-//! The context contains the tape recording the computational graph as well as a storage
-//! that lives through resets of the computational graph, to store for example tensors
-//! whose values we want to keep, like trainable parameters.
+//! use mushin as mu;
+//! use mu::Tensor;
 //!
-//! Once we have our context, we can start declaring tensors and use them in our operations:
-//! ```rust
-//! # use mushin::{Context, Values, add, matmul};
-//! # let ctx = Context::new();
-//! let x = ctx.constant::<1, 1, 2, 3>(Values::Eye(3.0));
-//! let w = ctx.variable::<1, 1, 3, 2>(Values::Normal, Some("weights"));
-//! let b = ctx.variable::<1, 1, 3, 3>(Values::Fill(0.0), Some("bias"));
-//! let z = add(&b, &matmul(&w, &x));
+//! let x = mu::eye::<1, 1, 2, 3>(3.0).freeze();
+//! let w = mu::randn::<1, 1, 3, 2>();
+//! let b = mu::fill::<1, 1, 3, 3>(0.0);
+//!
+//! let z = w.mm(&x).add(&b);
+//! z.backward();
+//!
+//! let dz_dw = w.grad();
+//! let dz_db = b.grad();
 //! ```
 //! The code above is an example of a perceptron neural network layer, where we have an input (`x`)
-//! that we treat as a constant and a set of persistent (trainable) parameters, (`w`,`b`).
-//! We then compute the output (`z`) as `WX + b`. Being this a reverse automatic differentation
-//! library, we are now of course interested on the gradients of the output with respect to the graph
-//! variables, which are obtained as follows:
-//! ```rust
-//! # use mushin::{Context, Gradients, Values};
-//! # let ctx = Context::new();
-//! # let z = ctx.variable::<1, 1, 1, 1>(Values::Identity, None);
-//! # let w = ctx.variable::<1, 1, 1, 1>(Values::Identity, None);
-//! # let b = ctx.variable::<1, 1, 1, 1>(Values::Identity, None);
-//! let grads = Gradients::compute(&z);
-//! let dz_dw = grads.wrt(&w);
-//! let dz_db = grads.wrt(&b);
-//! ```
+//! that we treat as a constant and a set of variable (trainable) parameters, (`w`,`b`).
+//! We then compute the output (`z`) as `WX + b`. All the operations are eagerly evaluated, so the
+//! resulting tensor values are available at any time. Comparted to lazy evaluation, this has the
+//! benefit that the built computation graph is trully dynamic, i.e. your graph operations can depend
+//! on the result of previous operations.
+//!
+//! Mushin automatically keeps track of all the operations performed up until any given variable
+//! and calling `backward()` in one of them traverses the computation graph in
+//! [reverse mode](https://en.wikipedia.org/wiki/Automatic_differentiation) to accumulate the
+//! gradients of all of its ancestor variables. By using the `grad()` method in any of them we can
+//! now retrieve their gradients as new `Variable` tensor, which in turn can be used to compute
+//! further gradients!
 
 #![deny(
+    unsafe_code,
     clippy::all,
     clippy::pedantic,
     clippy::nursery,
@@ -60,12 +55,121 @@
     clippy::missing_inline_in_public_items
 )]
 
-mod context;
-mod gradient;
-mod ops;
+mod graph;
 mod tensor;
 
-pub use context::Context;
-pub use gradient::Gradients;
-pub use ops::{add, div, matmul, mul, pow, sin, sub, sum};
-pub use tensor::Values;
+use graph::{node::Node, tape::Tape};
+use tensor::variable::Variable;
+
+pub use tensor::Tensor;
+
+/// Creates a `Variable` tensor filled with the given value
+#[must_use]
+#[inline]
+pub fn fill<const B: u64, const L: u64, const R: u64, const C: u64>(
+    v: f32,
+) -> Variable<B, L, R, C> {
+    let data = arrayfire::constant!(v; R,C,L,B);
+    Variable::new(Tape::default(), Node::declaration(data))
+}
+
+/// Creates a `Variable` tensor with the main diagonal filled with the given value, 0 everywhere else
+#[must_use]
+#[inline]
+pub fn eye<const B: u64, const L: u64, const R: u64, const C: u64>(v: f32) -> Variable<B, L, R, C> {
+    let data = v * arrayfire::identity::<f32>(arrayfire::dim4!(R, C, L, B));
+    Variable::new(Tape::default(), Node::declaration(data))
+}
+
+/// Creates a `Variable` tensor with random values taken from a uniform distribution between [0,1]
+#[must_use]
+#[inline]
+pub fn randu<const B: u64, const L: u64, const R: u64, const C: u64>() -> Variable<B, L, R, C> {
+    let data = arrayfire::randu!(R, C, L, B);
+    Variable::new(Tape::default(), Node::declaration(data))
+}
+
+/// Creates a `Variable` tensor with random values taken from a normal distribution centered at 0
+#[must_use]
+#[inline]
+pub fn randn<const B: u64, const L: u64, const R: u64, const C: u64>() -> Variable<B, L, R, C> {
+    let data = arrayfire::randn!(R, C, L, B);
+    Variable::new(Tape::default(), Node::declaration(data))
+}
+
+/// Creates a `Variable` tensor from the given array of values
+#[must_use]
+#[inline]
+pub fn custom<const B: u64, const L: u64, const R: u64, const C: u64>(
+    values: &[f32],
+) -> Variable<B, L, R, C> {
+    let data = arrayfire::Array::new(values, arrayfire::dim4!(R, C, L, B));
+    Variable::new(Tape::default(), Node::declaration(data))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate as mu;
+    use arrayfire::{abs, all_true_all, constant, dim4, identity, le, Array};
+    use mu::Tensor;
+
+    pub(crate) fn equal_arrays(x: Array<f32>, y: Array<f32>) -> bool {
+        all_true_all(&le(&abs(&(x - y)), &1e-15, false)).0
+    }
+
+    #[test]
+    fn fill() {
+        let x = mu::fill::<1, 2, 3, 4>(2.0);
+        assert!(equal_arrays(x.data(), constant!(2.0; 3,4,2,1)));
+    }
+
+    #[test]
+    fn eye() {
+        let x = mu::eye::<1, 2, 3, 4>(2.0);
+        assert!(equal_arrays(
+            x.data(),
+            identity::<f32>(dim4!(3, 4, 2, 1)) * 2.0f32
+        ));
+    }
+
+    #[test]
+    fn randu() {
+        let x = mu::randu::<1, 2, 3, 4>();
+        assert!(all_true_all(&le(&x.data(), &constant!(1.0; 3,4,2,1), false)).0)
+    }
+
+    #[test]
+    fn randn() {
+        let x = mu::randn::<1, 2, 3, 4>();
+        assert!(all_true_all(&le(&x.data(), &constant!(3.0; 3,4,2,1), false)).0)
+    }
+
+    #[test]
+    fn custom() {
+        let x = mu::custom::<1, 1, 1, 1>(&[1.0]);
+        assert!(equal_arrays(x.data(), constant!(1.0;1,1,1,1)));
+    }
+
+    #[test]
+    fn perceptron_backprop() {
+        let x = mu::eye::<1, 1, 2, 3>(3.0).freeze();
+        let w = mu::fill::<1, 1, 3, 2>(2.0);
+        let b = mu::fill::<1, 1, 3, 3>(1.0);
+
+        for _ in 0..2 {
+            let z = w.mm(&x).add(&b);
+            assert_eq!(z.tape().nodes().len(), 4);
+            assert!(equal_arrays(
+                z.data(),
+                Array::new(
+                    &[7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 1.0, 1.0, 1.0],
+                    dim4!(3, 3, 1, 1),
+                ),
+            ));
+            z.backward();
+            assert!(equal_arrays(w.grad().data(), constant!(3.0; 3,2,1,1)));
+            assert!(equal_arrays(b.grad().data(), constant!(1.0; 3,3,1,1)));
+            z.reset();
+        }
+    }
+}
