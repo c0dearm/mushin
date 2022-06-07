@@ -19,7 +19,7 @@
 //! tracked in the computation graph.
 
 pub mod constant;
-mod params;
+pub mod params;
 pub mod variable;
 
 use crate::tensor::params::{DoubleParam, SingleParam};
@@ -160,6 +160,25 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
         self.push_binary(
             other,
             arrayfire::pow(&self.data(), &other.data(), false),
+            reverse,
+        )
+    }
+
+    /// Performs the element-wise comparison of two tensors and returns the greater values
+    #[inline]
+    fn maximum<Y: Tensor<B, L, R, C>, Z: Tensor<B, L, R, C>>(&self, other: &Y) -> Z
+    where
+        Self: DoubleParam<Y, Z>,
+    {
+        let reverse = |df: &Array<f32>, x: &Array<f32>, y: &Array<f32>| {
+            (
+                df * arrayfire::gt(x, y, false),
+                df * arrayfire::gt(y, x, false),
+            )
+        };
+        self.push_binary(
+            other,
+            arrayfire::maxof(&self.data(), &other.data(), false),
             reverse,
         )
     }
@@ -315,5 +334,26 @@ mod tests {
         z.backward();
         assert!(equal_arrays(x.grad().data(), constant!(12.0; 3,2,1,1)));
         assert!(equal_arrays(y.grad().data(), constant!(5.5451775; 3,2,1,1)));
+    }
+
+    #[test]
+    fn maximum_forward_backward() {
+        let x = mu::eye::<1, 1, 3, 2>(3.0);
+        let y = mu::fill::<1, 1, 3, 2>(2.0);
+        let z = x.maximum(&y);
+        assert!(equal_arrays(
+            z.data(),
+            Array::new(&[3.0, 2.0, 2.0, 2.0, 3.0, 2.0], dim4!(3, 2, 1, 1))
+        ));
+
+        z.backward();
+        assert!(equal_arrays(
+            x.grad().data(),
+            Array::new(&[1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dim4!(3, 2, 1, 1))
+        ));
+        assert!(equal_arrays(
+            y.grad().data(),
+            Array::new(&[0.0, 1.0, 1.0, 1.0, 0.0, 1.0], dim4!(3, 2, 1, 1))
+        ));
     }
 }

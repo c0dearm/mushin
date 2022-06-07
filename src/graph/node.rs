@@ -9,23 +9,6 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 #[allow(clippy::module_name_repetitions)]
 pub type NodeId = usize;
 
-/// Contains the data and gradients of a `Node`
-pub struct Data {
-    data: Array<f32>,
-    grad: Array<f32>,
-}
-
-impl Data {
-    /// Creates new `Node` data with the gradients set to 0 as default
-    fn new(data: Array<f32>) -> Self {
-        let dims = data.dims();
-        Self {
-            data,
-            grad: constant(0.0, dims),
-        }
-    }
-}
-
 /// Represents the origin of a `Node`
 enum Origin {
     /// The node is a new variable declaration
@@ -39,7 +22,8 @@ enum Origin {
 /// A `Node` holds a `Variable` tensor data (values and gradients) as
 /// well as information about its `Origin`
 pub struct Node {
-    data: RefCell<Data>,
+    data: RefCell<Array<f32>>,
+    grad: RefCell<Array<f32>>,
     origin: Origin,
     id: NodeId,
 }
@@ -51,8 +35,11 @@ impl Node {
     /// to be able to tell if two nodes (tensors) are the same when used in
     /// different operations.
     fn new(data: Array<f32>, origin: Origin) -> Self {
+        let dims = data.dims();
+
         Self {
-            data: RefCell::new(Data::new(data)),
+            data: RefCell::new(data),
+            grad: RefCell::new(constant(0.0, dims)),
             origin,
             id: COUNTER.fetch_add(1, Ordering::Relaxed),
         }
@@ -118,17 +105,22 @@ impl Node {
 
     /// Returns the tensor data
     pub(crate) fn data(&self) -> Ref<Array<f32>> {
-        Ref::map(self.data.borrow(), |d| &d.data)
+        self.data.borrow()
+    }
+
+    /// Returns a mutable reference to the tensor data
+    pub(crate) fn data_mut(&self) -> RefMut<Array<f32>> {
+        self.data.borrow_mut()
     }
 
     /// Returns the tensor gradients
     pub(crate) fn grad(&self) -> Ref<Array<f32>> {
-        Ref::map(self.data.borrow(), |d| &d.grad)
+        self.grad.borrow()
     }
 
     /// Returns a mutable reference to the tensor gradients
     pub(crate) fn grad_mut(&self) -> RefMut<Array<f32>> {
-        RefMut::map(self.data.borrow_mut(), |d| &mut d.grad)
+        self.grad.borrow_mut()
     }
 
     /// Computes the gradients of this node ancestors by following the
@@ -160,6 +152,11 @@ impl Node {
     /// Returns node's ID
     pub(crate) const fn id(&self) -> NodeId {
         self.id
+    }
+
+    /// Returns `true` if the node is `Variable` declaration, `false` otherwise
+    pub(crate) const fn is_declaration(&self) -> bool {
+        matches!(self.origin, Origin::Declaration)
     }
 }
 
@@ -228,15 +225,8 @@ impl BinaryOp {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{Data, Node, Origin};
+    use super::{Node, Origin};
     use crate::tests::equal_arrays;
-
-    #[test]
-    fn new_data() {
-        let data = Data::new(arrayfire::constant!(2.0; 1,2,3,4));
-        assert!(equal_arrays(data.data, arrayfire::constant!(2.0; 1,2,3,4)));
-        assert!(equal_arrays(data.grad, arrayfire::constant!(0.0; 1,2,3,4)));
-    }
 
     #[test]
     fn new_node() {
