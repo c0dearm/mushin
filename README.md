@@ -31,11 +31,10 @@ Then, add `mushin` as one of your dependencies:
 
 ```toml
 [dependencies]
-mushin = "0.4"
+mushin = "0.5"
 ```
 
-The following is quite a self-explanatory example of the basic usage of **Mushin**, for more details, please check the crate [docs](https://docs.rs/mushin/latest/mushin/) or just ask us questions in the form of [issues](https://github.com/c0dearm/mushin/issues/new)! 😊
-
+The following is quite a self-explanatory example of the basic usage of **Mushin** to build computation graphs and get the derivatives back:
 ```rust
 use mushin as mu;
 use mu::Tensor;
@@ -53,10 +52,31 @@ fn main() {
 }
 ```
 
+By default, this library enables the `nn` feature that gives access to the `nn` module, which builds upon the auto-grad foundation of `Mushin` to deliver a set of **Deep Learning** utilities, such as activation functions, layers, losses and optimizers. If you don't really need that part and you are only insterested in the pure auto-grad functionality of this library, the `nn` module can be disabled with `default-features = false`. Here follows a brief example on how it works:
+
+```rust
+use mushin as mu;
+use mu::nn::{layers::Linear, activations::relu, losses::mse, optimizers::SGD};
+
+let x = mu::eye::<16, 1, 1, 3>(1.0).freeze();
+let y = mu::eye::<16, 1, 1, 5>(3.0).freeze();
+
+let linear = Linear::<16, 3, 5, _, _>::new();
+let optim = SGD::new(&linear.parameters(), 0.01);
+
+for _ in 0..5 {
+    let z = relu(&linear.forward(&x));
+    let loss = mse(&z, &y);
+    
+    loss.backward();
+    optim.step();
+    loss.reset();
+}
+```
+
 ## Roadmap
 
-- [ ] Add more operations
-- [ ] Add a cargo feature for deep learning, which adds layers, optimizers, losses and activation functions
+- [ ] Continue to add more deep learning utilities
 - [ ] Add benchmarks
 
 ## Contributing

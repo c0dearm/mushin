@@ -7,7 +7,7 @@ pub struct Constant<const B: u64, const L: u64, const R: u64, const C: u64>(Arra
 
 impl<const B: u64, const L: u64, const R: u64, const C: u64> Constant<B, L, R, C> {
     /// Creates a new constant
-    pub(crate) fn new(data: Array<f32>) -> Self {
+    pub(crate) const fn new(data: Array<f32>) -> Self {
         Self(data)
     }
 

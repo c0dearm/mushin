@@ -42,6 +42,12 @@
 //! gradients of all of its ancestor variables. By using the `grad()` method in any of them we can
 //! now retrieve their gradients as new `Variable` tensor, which in turn can be used to compute
 //! further gradients!
+//!
+//! It is quite possible the reader is more interested in the Deep Learning utilities of this
+//! library rather than the raw auto-grad foundations.
+//! By default, **Mushin** includes the [nn module](https://docs.rs/mushin/latest/mushin/nn/index.html)
+//! that provides optimizers, activation functions, layers and losses ready to use to build neural network
+//! modules. Checkout the module docs for instructions on how to use them.
 
 #![deny(
     unsafe_code,
@@ -54,6 +60,9 @@
     clippy::shadow_unrelated,
     clippy::missing_inline_in_public_items
 )]
+
+#[cfg(feature = "nn")]
+pub mod nn;
 
 mod graph;
 mod tensor;
@@ -148,28 +157,5 @@ mod tests {
     fn custom() {
         let x = mu::custom::<1, 1, 1, 1>(&[1.0]);
         assert!(equal_arrays(x.data(), constant!(1.0;1,1,1,1)));
-    }
-
-    #[test]
-    fn perceptron_backprop() {
-        let x = mu::eye::<1, 1, 2, 3>(3.0).freeze();
-        let w = mu::fill::<1, 1, 3, 2>(2.0);
-        let b = mu::fill::<1, 1, 3, 3>(1.0);
-
-        for _ in 0..2 {
-            let z = w.mm(&x).add(&b);
-            assert_eq!(z.tape().nodes().len(), 4);
-            assert!(equal_arrays(
-                z.data(),
-                Array::new(
-                    &[7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 1.0, 1.0, 1.0],
-                    dim4!(3, 3, 1, 1),
-                ),
-            ));
-            z.backward();
-            assert!(equal_arrays(w.grad().data(), constant!(3.0; 3,2,1,1)));
-            assert!(equal_arrays(b.grad().data(), constant!(1.0; 3,3,1,1)));
-            z.reset();
-        }
     }
 }
