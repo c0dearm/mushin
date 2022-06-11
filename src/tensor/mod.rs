@@ -30,6 +30,39 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     /// Returns the tensor data as an `arrayfire` `Array`
     fn data(&self) -> Array<f32>;
 
+    /// Does nothing
+    #[must_use]
+    #[inline]
+    fn identity(&self) -> Self
+    where
+        Self: SingleParam<Self>,
+    {
+        let reverse = |df: &Array<f32>, _: &Array<f32>| df.clone();
+        self.push_unary(self.data(), reverse)
+    }
+
+    /// Changes the shape of the tensor to the given dimensions
+    #[inline]
+    fn reshape<
+        const BY: u64,
+        const LY: u64,
+        const RY: u64,
+        const CY: u64,
+        Y: Tensor<BY, LY, RY, CY>,
+    >(
+        &self,
+    ) -> Y
+    where
+        Self: SingleParam<Y>,
+    {
+        let reverse =
+            |df: &Array<f32>, _: &Array<f32>| arrayfire::moddims(df, arrayfire::dim4!(R, C, L, B));
+        self.push_unary(
+            arrayfire::moddims(&self.data(), arrayfire::dim4!(RY, CY, LY, BY)),
+            reverse,
+        )
+    }
+
     /// Computes `sin(x)`
     #[must_use]
     #[inline]
@@ -191,6 +224,38 @@ mod tests {
     use arrayfire::{constant, dim4, Array};
 
     // All result comparisons are taken from performing the exact same operations on Tensorflow
+
+    #[test]
+    fn identity_forward_backward() {
+        let x = mu::eye::<1, 1, 3, 2>(3.0);
+        let z = x.identity();
+        assert!(equal_arrays(
+            z.data(),
+            Array::new(&[3.0, 0.0, 0.0, 0.0, 3.0, 0.0], dim4!(3, 2, 1, 1))
+        ));
+
+        z.backward();
+        assert!(equal_arrays(
+            x.grad().data(),
+            Array::new(&[1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dim4!(3, 2, 1, 1))
+        ));
+    }
+
+    #[test]
+    fn reshape_forward_backward() {
+        let x = mu::eye::<1, 1, 3, 2>(3.0);
+        let z = x.reshape::<1, 1, 1, 6, _>();
+        assert!(equal_arrays(
+            z.data(),
+            Array::new(&[3.0, 0.0, 0.0, 0.0, 3.0, 0.0], dim4!(1, 6, 1, 1))
+        ));
+
+        z.backward();
+        assert!(equal_arrays(
+            x.grad().data(),
+            Array::new(&[1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dim4!(3, 2, 1, 1))
+        ));
+    }
 
     #[test]
     fn sin_forward_backward() {
