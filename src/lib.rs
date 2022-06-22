@@ -123,7 +123,7 @@ mod tests {
     use mu::Tensor;
 
     pub(crate) fn equal_arrays(x: Array<f32>, y: Array<f32>) -> bool {
-        all_true_all(&le(&abs(&(x - y)), &1e-15, false)).0
+        all_true_all(&le(&abs(&(x - y)), &1e-6, false)).0
     }
 
     #[test]

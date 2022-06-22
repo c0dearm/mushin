@@ -27,7 +27,7 @@ use crate::tensor::{constant::Constant, variable::Variable};
 /// Determines the output of single parameter operations (unary)
 pub trait SingleParam<Y> {
     /// Creates a new tensor with the given result as data and pushes it to the computation graph (if required)
-    fn push_unary(&self, result: Array<f32>, reverse: UnaryReverseFn) -> Y;
+    fn push_unary(&self, result: Array<f32>, reverse: UnaryReverseFn, args: &[Array<f32>]) -> Y;
 }
 
 impl<
@@ -41,8 +41,13 @@ impl<
         const YC: u64,
     > SingleParam<Variable<YB, YL, YR, YC>> for Variable<B, L, R, C>
 {
-    fn push_unary(&self, result: Array<f32>, reverse: UnaryReverseFn) -> Variable<YB, YL, YR, YC> {
-        let node = Node::unary(result, self.into(), reverse);
+    fn push_unary(
+        &self,
+        result: Array<f32>,
+        reverse: UnaryReverseFn,
+        args: &[Array<f32>],
+    ) -> Variable<YB, YL, YR, YC> {
+        let node = Node::unary(result, self.into(), reverse, args);
         Variable::new(self.tape().clone(), node)
     }
 }
@@ -58,7 +63,12 @@ impl<
         const YC: u64,
     > SingleParam<Constant<YB, YL, YR, YC>> for Constant<B, L, R, C>
 {
-    fn push_unary(&self, result: Array<f32>, _reverse: UnaryReverseFn) -> Constant<YB, YL, YR, YC> {
+    fn push_unary(
+        &self,
+        result: Array<f32>,
+        _reverse: UnaryReverseFn,
+        _args: &[Array<f32>],
+    ) -> Constant<YB, YL, YR, YC> {
         Constant::new(result)
     }
 }
@@ -66,7 +76,13 @@ impl<
 /// Determines the output of double parameter operations (binary)
 pub trait DoubleParam<Y, Z> {
     /// Creates a new tensor with the given result as data and pushes it to the computation graph (if required)
-    fn push_binary(&self, other: &Y, result: Array<f32>, reverse: BinaryReverseFn) -> Z;
+    fn push_binary(
+        &self,
+        other: &Y,
+        result: Array<f32>,
+        reverse: BinaryReverseFn,
+        args: &[Array<f32>],
+    ) -> Z;
 }
 
 impl<
@@ -89,8 +105,9 @@ impl<
         other: &Variable<YB, YL, YR, YC>,
         result: Array<f32>,
         reverse: BinaryReverseFn,
+        args: &[Array<f32>],
     ) -> Variable<ZB, ZL, ZR, ZC> {
-        let node = Node::binary_varvar(result, (self.into(), other.into()), reverse);
+        let node = Node::binary_varvar(result, (self.into(), other.into()), reverse, args);
         Variable::new(self.tape().merge(other.tape()), node)
     }
 }
@@ -112,11 +129,12 @@ impl<
 {
     fn push_binary(
         &self,
-        other: &Constant<YB, YL, YR, YC>,
+        _other: &Constant<YB, YL, YR, YC>,
         result: Array<f32>,
         reverse: BinaryReverseFn,
+        args: &[Array<f32>],
     ) -> Variable<ZB, ZL, ZR, ZC> {
-        let node = Node::binary_varconst(result, (self.into(), other.into()), reverse);
+        let node = Node::binary_varconst(result, self.into(), reverse, args);
         Variable::new(self.tape().clone(), node)
     }
 }
@@ -141,8 +159,9 @@ impl<
         other: &Variable<YB, YL, YR, YC>,
         result: Array<f32>,
         reverse: BinaryReverseFn,
+        args: &[Array<f32>],
     ) -> Variable<ZB, ZL, ZR, ZC> {
-        let node = Node::binary_constvar(result, (self.into(), other.into()), reverse);
+        let node = Node::binary_constvar(result, other.into(), reverse, args);
         Variable::new(other.tape().clone(), node)
     }
 }
@@ -167,6 +186,7 @@ impl<
         _other: &Constant<YB, YL, YR, YC>,
         result: Array<f32>,
         _reverse: BinaryReverseFn,
+        _args: &[Array<f32>],
     ) -> Constant<ZB, ZL, ZR, ZC> {
         Constant::new(result)
     }

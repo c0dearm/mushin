@@ -1,20 +1,87 @@
-use crate::tensor::{constant::Constant, params::DoubleParam, Tensor};
+use crate::tensor::{params::SingleParam, Tensor};
+use arrayfire::{Array, MatProp};
 
 /// Performs the `ReLu` activation function on the given tensor
 #[inline]
 pub fn relu<const B: u64, const L: u64, const R: u64, const C: u64, X>(x: &X) -> X
 where
-    X: Tensor<B, L, R, C> + DoubleParam<Constant<B, L, R, C>, X>,
+    X: Tensor<B, L, R, C> + SingleParam<X>,
 {
-    x.maximum(&Constant::new(arrayfire::constant!(0.0; R,C,L,B)))
+    let result = arrayfire::maxof(&x.data(), &arrayfire::constant!(0.0f32; R,C,L,B), false);
+    let reverse =
+        |df: &Array<f32>, args: &[Array<f32>]| df * arrayfire::gt(&args[0], &0.0f32, false);
+    x.push_unary(result, reverse, &[x.data()])
+}
+
+/// Performs the `Softmax` activation function on the given row vector
+#[inline]
+pub fn softmax<const B: u64, const C: u64, X>(x: &X) -> X
+where
+    X: Tensor<B, 1, 1, C> + SingleParam<X>,
+{
+    // This is required for numerical stability
+    let shift = arrayfire::sub(&x.data(), &arrayfire::max_all(&x.data()).0, true);
+    let exps = arrayfire::exp(&shift);
+    let result = arrayfire::div(&exps, &arrayfire::sum_all(&exps).0, false);
+
+    let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
+        let softmax = &args[0];
+        arrayfire::matmul(
+            df,
+            &arrayfire::sub(
+                &arrayfire::diag_create(&arrayfire::transpose(softmax, false), 0),
+                &arrayfire::matmul(softmax, softmax, MatProp::TRANS, MatProp::NONE),
+                false,
+            ),
+            MatProp::NONE,
+            MatProp::NONE,
+        )
+    };
+
+    x.push_unary(result.clone(), reverse, &[result])
+}
+
+/// Performs the `log(Softmax)` activation function on the given row vector
+#[inline]
+pub fn logsoftmax<const B: u64, const C: u64, X>(x: &X) -> X
+where
+    X: Tensor<B, 1, 1, C> + SingleParam<X>,
+{
+    // This is required for numerical stability
+    let shift = arrayfire::sub(&x.data(), &arrayfire::max_all(&x.data()).0, true);
+    let exps = arrayfire::exp(&shift);
+    let softmax = arrayfire::div(&exps, &arrayfire::sum_all(&exps).0, false);
+    let result = arrayfire::log(&softmax);
+
+    let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
+        let s = &args[0];
+        arrayfire::matmul(
+            df,
+            &arrayfire::sub(
+                &arrayfire::identity::<f32>(arrayfire::dim4!(C, C, 1, B)),
+                &arrayfire::matmul(
+                    &arrayfire::constant!(1.0; C, 1, 1, B),
+                    s,
+                    MatProp::NONE,
+                    MatProp::NONE,
+                ),
+                false,
+            ),
+            MatProp::NONE,
+            MatProp::NONE,
+        )
+    };
+
+    x.push_unary(result, reverse, &[softmax])
 }
 
 #[cfg(test)]
 mod tests {
-    use super::relu;
+    use super::{logsoftmax, relu, softmax};
     use crate as mu;
     use crate::tests::equal_arrays;
     use crate::Tensor;
+    use arrayfire::{dim4, Array};
 
     #[test]
     fn relu_forward_backward() {
@@ -30,6 +97,40 @@ mod tests {
         assert!(equal_arrays(
             x.grad().data(),
             arrayfire::identity(arrayfire::dim4!(2, 3, 1, 1))
+        ));
+    }
+
+    #[test]
+    fn softmax_forward_backward() {
+        let x = mu::custom::<1, 1, 1, 3>(&[0.3, 0.2, 0.5]);
+        let z = softmax(&x);
+
+        assert!(equal_arrays(
+            z.data(),
+            Array::new(&[0.31987306, 0.28943312, 0.39069384], dim4!(1, 3, 1, 1)),
+        ));
+
+        z.backward();
+        assert!(equal_arrays(
+            x.grad().data(),
+            Array::new(&[0.0, 0.0, 0.0], dim4!(1, 3, 1, 1)),
+        ));
+    }
+
+    #[test]
+    fn logsoftmax_forward_backward() {
+        let x = mu::custom::<1, 1, 1, 3>(&[0.3, 0.2, 0.5]);
+        let z = logsoftmax(&x);
+
+        assert!(equal_arrays(
+            z.data(),
+            Array::new(&[-1.1398311, -1.239831, -0.939831], dim4!(1, 3, 1, 1)),
+        ));
+
+        z.backward();
+        assert!(equal_arrays(
+            x.grad().data(),
+            Array::new(&[0.04038084, 0.13170063, -0.17208147], dim4!(1, 3, 1, 1)),
         ));
     }
 }

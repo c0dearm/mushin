@@ -1,51 +1,93 @@
-use crate::tensor::{
-    constant::Constant,
-    params::{DoubleParam, SingleParam},
-    Tensor,
-};
+use crate::tensor::{constant::Constant, params::SingleParam, Tensor};
+use arrayfire::Array;
 
-/// Calculates the Mean Squared Error between two tensors
+/// Calculates the Mean Squared Error between two row vectors
 #[inline]
-pub fn mse<const B: u64, const L: u64, const R: u64, const C: u64, X, Z, Y, Z0, Z1, Z2>(
-    x: &X,
-    y: &Y,
-) -> Z
+pub fn mse<const B: u64, const C: u64, X, Z>(x: &X, y: &Constant<B, 1, 1, C>) -> Z
 where
-    Z2: Tensor<1, 1, 1, 1> + DoubleParam<Constant<1, 1, 1, 1>, Z>,
-    Z1: Tensor<B, L, R, C> + SingleParam<Z2>,
-    Z0: Tensor<B, L, R, C> + DoubleParam<Constant<B, L, R, C>, Z1>,
-    X: Tensor<B, L, R, C> + DoubleParam<Y, Z0>,
-    Y: Tensor<B, L, R, C>,
+    X: Tensor<B, 1, 1, C> + SingleParam<Z>,
     Z: Tensor<1, 1, 1, 1>,
 {
-    #[allow(clippy::cast_precision_loss)]
-    let count = Constant::new(arrayfire::constant!((B*L*R*C) as f32; 1,1,1,1));
-    let square = Constant::new(arrayfire::constant!(2.0; R,C,L,B));
-    x.sub(y).pow(&square).sum().div(&count)
+    let result = arrayfire::div(
+        &arrayfire::constant!(arrayfire::sum_all(&arrayfire::pow(
+        &arrayfire::sub(&x.data(), &y.data(), false),
+        &2.0f32,
+        false,
+    )).0; 1,1,1,1),
+        &C,
+        false,
+    );
+
+    let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
+        df * (2.0f32
+            * arrayfire::div(
+                &arrayfire::sum_all(&arrayfire::sub(&args[0], &args[1], false)).0,
+                &C,
+                false,
+            ))
+    };
+
+    x.push_unary(result, reverse, &[x.data(), y.data()])
+}
+
+/// Calculates the Negative Log Likelihood among a set of classes
+#[inline]
+pub fn nll<const B: u64, const C: u64, X, Z>(x: &X, y: &Constant<B, 1, 1, C>) -> Z
+where
+    X: Tensor<B, 1, 1, C> + SingleParam<Z>,
+    Z: Tensor<1, 1, 1, 1>,
+{
+    let logits = arrayfire::log(&arrayfire::add(&y.data(), &1e-7f32, false));
+    let result = arrayfire::constant!(-arrayfire::sum_all(&arrayfire::mul(
+        &x.data(),
+        &logits,
+        false,
+    )).0; 1,1,1,1);
+
+    let reverse = |df: &Array<f32>, args: &[Array<f32>]| -(df * &args[0]);
+
+    x.push_unary(result, reverse, &[logits])
 }
 
 #[cfg(test)]
 mod tests {
-    use super::mse;
+    use super::{mse, nll};
     use crate as mu;
     use crate::tests::equal_arrays;
     use crate::Tensor;
+    use arrayfire::Array;
 
     #[test]
     fn mse_forward_backward() {
-        let x = mu::fill::<1, 1, 2, 3>(2.0);
-        let y = mu::fill::<1, 1, 2, 3>(0.5);
+        let x = mu::fill::<1, 1, 1, 6>(2.0);
+        let y = mu::fill::<1, 1, 1, 6>(0.5).freeze();
         let z = mse(&x, &y);
         assert!(equal_arrays(z.data(), arrayfire::constant!(2.25; 1,1,1,1)));
 
         z.backward();
         assert!(equal_arrays(
             x.grad().data(),
-            arrayfire::constant!(0.5; 2,3,1,1)
+            arrayfire::constant!(3.0; 1,6,1,1)
         ));
+    }
+
+    #[test]
+    fn nll_forward_backward() {
+        let x = mu::custom::<1, 1, 1, 3>(&[0.5, 0.2, 0.3]);
+        let y = mu::custom::<1, 1, 1, 3>(&[1.0, 0.0, 0.0]).freeze();
+        let z = nll(&x, &y);
         assert!(equal_arrays(
-            y.grad().data(),
-            arrayfire::constant!(-0.5; 2,3,1,1)
+            z.data(),
+            arrayfire::constant!(8.059048; 1,1,1,1)
+        ));
+
+        z.backward();
+        assert!(equal_arrays(
+            x.grad().data(),
+            Array::<f32>::new(
+                &[1.1920929e-07, 1.6118095e+01, 1.6118095e+01],
+                arrayfire::dim4!(1, 3, 1, 1)
+            )
         ));
     }
 }
