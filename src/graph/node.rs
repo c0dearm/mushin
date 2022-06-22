@@ -22,10 +22,10 @@ enum Origin {
 /// A `Node` holds a `Variable` tensor data (values and gradients) as
 /// well as information about its `Origin`
 pub struct Node {
+    id: NodeId,
     data: RefCell<Array<f32>>,
     grad: RefCell<Array<f32>>,
     origin: Origin,
-    id: NodeId,
 }
 
 impl Node {
@@ -51,22 +51,36 @@ impl Node {
     }
 
     /// Creates a new `Node` with a unary `Operation` as origin
-    pub(crate) fn unary(data: Array<f32>, param: Rc<Self>, reverse: UnaryReverseFn) -> Self {
-        Self::new(data, Origin::Unary(UnaryOp { param, reverse }))
+    pub(crate) fn unary(
+        data: Array<f32>,
+        ancestor: Rc<Self>,
+        reverse: UnaryReverseFn,
+        args: &[Array<f32>],
+    ) -> Self {
+        Self::new(
+            data,
+            Origin::Unary(UnaryOp {
+                ancestor,
+                reverse,
+                args: args.to_vec(),
+            }),
+        )
     }
 
     /// Creates a new `Node` with a binary `Operation` as origin and both operation
     /// parameters are `Variable`s
     pub(crate) fn binary_varvar(
         data: Array<f32>,
-        params: (Rc<Self>, Rc<Self>),
+        ancestors: (Rc<Self>, Rc<Self>),
         reverse: BinaryReverseFn,
+        args: &[Array<f32>],
     ) -> Self {
         Self::new(
             data,
             Origin::Binary(BinaryOp {
-                params: BinaryParams::VarVar(params.0, params.1),
+                ancestors: BinaryParams::VarVar(ancestors.0, ancestors.1),
                 reverse,
+                args: args.to_vec(),
             }),
         )
     }
@@ -75,14 +89,16 @@ impl Node {
     /// first operation parameter is a `Variable`
     pub(crate) fn binary_varconst(
         data: Array<f32>,
-        params: (Rc<Self>, Array<f32>),
+        ancestor: Rc<Self>,
         reverse: BinaryReverseFn,
+        args: &[Array<f32>],
     ) -> Self {
         Self::new(
             data,
             Origin::Binary(BinaryOp {
-                params: BinaryParams::VarConst(params.0, params.1),
+                ancestors: BinaryParams::VarConst(ancestor),
                 reverse,
+                args: args.to_vec(),
             }),
         )
     }
@@ -91,14 +107,16 @@ impl Node {
     /// second operation parameter is a `Variable`
     pub(crate) fn binary_constvar(
         data: Array<f32>,
-        params: (Array<f32>, Rc<Self>),
+        ancestor: Rc<Self>,
         reverse: BinaryReverseFn,
+        args: &[Array<f32>],
     ) -> Self {
         Self::new(
             data,
             Origin::Binary(BinaryOp {
-                params: BinaryParams::ConstVar(params.0, params.1),
+                ancestors: BinaryParams::ConstVar(ancestor),
                 reverse,
+                args: args.to_vec(),
             }),
         )
     }
@@ -171,53 +189,55 @@ impl Drop for Node {
 enum BinaryParams {
     /// Both parameters are `Variable`s
     VarVar(Rc<Node>, Rc<Node>),
-    /// Only the first parameter is a `Variable`
-    VarConst(Rc<Node>, Array<f32>),
+    /// Only one parameter is a `Variable`
+    VarConst(Rc<Node>),
     /// Only the second parameter is a `Variable`
-    ConstVar(Array<f32>, Rc<Node>),
+    ConstVar(Rc<Node>),
 }
 
 /// Computes the partial adjoint derivative of a unary operation for its parameter
-pub type UnaryReverseFn = fn(&Array<f32>, &Array<f32>) -> Array<f32>;
+pub type UnaryReverseFn = fn(df: &Array<f32>, args: &[Array<f32>]) -> Array<f32>;
 /// Computes the partial adjoint derivative of a binary operation for each of its parameters
-pub type BinaryReverseFn = fn(&Array<f32>, &Array<f32>, &Array<f32>) -> (Array<f32>, Array<f32>);
+pub type BinaryReverseFn = fn(df: &Array<f32>, args: &[Array<f32>]) -> (Array<f32>, Array<f32>);
 
 /// Represents a unary `Operation`
 struct UnaryOp {
-    param: Rc<Node>,
+    ancestor: Rc<Node>,
     reverse: UnaryReverseFn,
+    args: Vec<Array<f32>>,
 }
 
 impl UnaryOp {
     /// Computes the partial adjoint derivative and accumulates it to the parameter gradients
     fn reverse(&self, df: &Array<f32>) {
-        let partial = (self.reverse)(df, &self.param.data());
-        *self.param.grad_mut() += partial;
+        let partial = (self.reverse)(df, self.args.as_slice());
+        *self.ancestor.grad_mut() += partial;
     }
 }
 
 /// Represents a binary `Operation`
 struct BinaryOp {
-    params: BinaryParams,
+    ancestors: BinaryParams,
     reverse: BinaryReverseFn,
+    args: Vec<Array<f32>>,
 }
 
 impl BinaryOp {
     /// Computes the partial adjoints derivatives and accumulates them to the parameters gradients
     fn reverse(&self, df: &Array<f32>) {
-        match self.params {
-            BinaryParams::VarVar(ref param_a, ref param_b) => {
-                let (partial_a, partial_b) = (self.reverse)(df, &param_a.data(), &param_b.data());
-                *param_a.grad_mut() += partial_a;
-                *param_b.grad_mut() += partial_b;
+        match self.ancestors {
+            BinaryParams::VarVar(ref ancestor_a, ref ancestor_b) => {
+                let (partial_a, partial_b) = (self.reverse)(df, self.args.as_slice());
+                *ancestor_a.grad_mut() += partial_a;
+                *ancestor_b.grad_mut() += partial_b;
             }
-            BinaryParams::VarConst(ref param_a, ref param_b) => {
-                let (partial, _) = (self.reverse)(df, &param_a.data(), param_b);
-                *param_a.grad_mut() += partial;
+            BinaryParams::VarConst(ref ancestor) => {
+                let (partial, _) = (self.reverse)(df, self.args.as_slice());
+                *ancestor.grad_mut() += partial;
             }
-            BinaryParams::ConstVar(ref param_a, ref param_b) => {
-                let (_, partial) = (self.reverse)(df, param_a, &param_b.data());
-                *param_b.grad_mut() += partial;
+            BinaryParams::ConstVar(ref ancestor) => {
+                let (_, partial) = (self.reverse)(df, self.args.as_slice());
+                *ancestor.grad_mut() += partial;
             }
         }
     }

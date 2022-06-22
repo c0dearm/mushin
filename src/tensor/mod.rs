@@ -23,7 +23,7 @@ pub mod params;
 pub mod variable;
 
 use crate::tensor::params::{DoubleParam, SingleParam};
-use arrayfire::{constant, Array};
+use arrayfire::Array;
 
 /// Defines operations on tensors, either `Constant` or `Variable`
 pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized {
@@ -37,8 +37,8 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: SingleParam<Self>,
     {
-        let reverse = |df: &Array<f32>, _: &Array<f32>| df.clone();
-        self.push_unary(self.data(), reverse)
+        let reverse = |df: &Array<f32>, _: &[Array<f32>]| df.clone();
+        self.push_unary(self.data(), reverse, &[])
     }
 
     /// Changes the shape of the tensor to the given dimensions
@@ -55,11 +55,13 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: SingleParam<Y>,
     {
-        let reverse =
-            |df: &Array<f32>, _: &Array<f32>| arrayfire::moddims(df, arrayfire::dim4!(R, C, L, B));
+        let reverse = |df: &Array<f32>, _: &[Array<f32>]| {
+            arrayfire::moddims(df, arrayfire::dim4!(R, C, L, B))
+        };
         self.push_unary(
             arrayfire::moddims(&self.data(), arrayfire::dim4!(RY, CY, LY, BY)),
             reverse,
+            &[],
         )
     }
 
@@ -70,8 +72,8 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: SingleParam<Self>,
     {
-        let reverse = |df: &Array<f32>, x: &Array<f32>| df * arrayfire::cos(x);
-        self.push_unary(arrayfire::sin(&self.data()), reverse)
+        let reverse = |df: &Array<f32>, args: &[Array<f32>]| df * arrayfire::cos(&args[0]);
+        self.push_unary(arrayfire::sin(&self.data()), reverse, &[self.data()])
     }
 
     /// Computes `cos(x)`
@@ -81,21 +83,8 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: SingleParam<Self>,
     {
-        let reverse = |df: &Array<f32>, x: &Array<f32>| df * -arrayfire::sin(x);
-        self.push_unary(arrayfire::cos(&self.data()), reverse)
-    }
-
-    /// Sums all the elements and returns the result a single value tensor
-    #[inline]
-    fn sum<Y: Tensor<1, 1, 1, 1>>(&self) -> Y
-    where
-        Self: SingleParam<Y>,
-    {
-        let reverse = |df: &Array<f32>, _: &Array<f32>| df.clone();
-        self.push_unary(
-            constant!(arrayfire::sum_all(&self.data()).0; 1,1,1,1),
-            reverse,
-        )
+        let reverse = |df: &Array<f32>, args: &[Array<f32>]| df * -arrayfire::sin(&args[0]);
+        self.push_unary(arrayfire::cos(&self.data()), reverse, &[self.data()])
     }
 
     /// Perform the element-wise addition of two tensors
@@ -104,11 +93,12 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: DoubleParam<Y, Z>,
     {
-        let reverse = |df: &Array<f32>, _: &Array<f32>, _: &Array<f32>| (df.clone(), df.clone());
+        let reverse = |df: &Array<f32>, _: &[Array<f32>]| (df.clone(), df.clone());
         self.push_binary(
             other,
             arrayfire::add(&self.data(), &other.data(), false),
             reverse,
+            &[],
         )
     }
 
@@ -118,11 +108,12 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: DoubleParam<Y, Z>,
     {
-        let reverse = |df: &Array<f32>, _: &Array<f32>, _: &Array<f32>| (df.clone(), -df.clone());
+        let reverse = |df: &Array<f32>, _: &[Array<f32>]| (df.clone(), -df.clone());
         self.push_binary(
             other,
             arrayfire::sub(&self.data(), &other.data(), false),
             reverse,
+            &[],
         )
     }
 
@@ -132,11 +123,12 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: DoubleParam<Y, Z>,
     {
-        let reverse = |df: &Array<f32>, x: &Array<f32>, y: &Array<f32>| (df * y, df * x);
+        let reverse = |df: &Array<f32>, args: &[Array<f32>]| (df * &args[1], df * &args[0]);
         self.push_binary(
             other,
             arrayfire::mul(&self.data(), &other.data(), false),
             reverse,
+            &[self.data(), other.data()],
         )
     }
 
@@ -146,11 +138,15 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: DoubleParam<Y, Z>,
     {
-        let reverse = |df: &Array<f32>, x: &Array<f32>, y: &Array<f32>| (df / y, -(df * x / y / y));
+        let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
+            let (x, y) = (&args[0], &args[1]);
+            (df / y, -(df * x / y / y))
+        };
         self.push_binary(
             other,
             arrayfire::div(&self.data(), &other.data(), false),
             reverse,
+            &[self.data(), other.data()],
         )
     }
 
@@ -160,10 +156,20 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     where
         Self: DoubleParam<Y, Z>,
     {
-        let reverse = |df: &Array<f32>, x: &Array<f32>, y: &Array<f32>| {
+        let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
             (
-                arrayfire::matmul(df, y, arrayfire::MatProp::NONE, arrayfire::MatProp::TRANS),
-                arrayfire::matmul(x, df, arrayfire::MatProp::TRANS, arrayfire::MatProp::NONE),
+                arrayfire::matmul(
+                    df,
+                    &args[1],
+                    arrayfire::MatProp::NONE,
+                    arrayfire::MatProp::TRANS,
+                ),
+                arrayfire::matmul(
+                    &args[0],
+                    df,
+                    arrayfire::MatProp::TRANS,
+                    arrayfire::MatProp::NONE,
+                ),
             )
         };
         self.push_binary(
@@ -175,44 +181,7 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
                 arrayfire::MatProp::NONE,
             ),
             reverse,
-        )
-    }
-
-    /// Perform the element-wise power of two tensors
-    #[inline]
-    fn pow<Y: Tensor<B, L, R, C>, Z: Tensor<B, L, R, C>>(&self, other: &Y) -> Z
-    where
-        Self: DoubleParam<Y, Z>,
-    {
-        let reverse = |df: &Array<f32>, x: &Array<f32>, y: &Array<f32>| {
-            (
-                df * y * arrayfire::pow(x, &(y - 1.0f32), false),
-                df * arrayfire::pow(x, y, false) * arrayfire::log(x),
-            )
-        };
-        self.push_binary(
-            other,
-            arrayfire::pow(&self.data(), &other.data(), false),
-            reverse,
-        )
-    }
-
-    /// Performs the element-wise comparison of two tensors and returns the greater values
-    #[inline]
-    fn maximum<Y: Tensor<B, L, R, C>, Z: Tensor<B, L, R, C>>(&self, other: &Y) -> Z
-    where
-        Self: DoubleParam<Y, Z>,
-    {
-        let reverse = |df: &Array<f32>, x: &Array<f32>, y: &Array<f32>| {
-            (
-                df * arrayfire::gt(x, y, false),
-                df * arrayfire::gt(y, x, false),
-            )
-        };
-        self.push_binary(
-            other,
-            arrayfire::maxof(&self.data(), &other.data(), false),
-            reverse,
+            &[self.data(), other.data()],
         )
     }
 }
@@ -302,16 +271,6 @@ mod tests {
     }
 
     #[test]
-    fn sum_forward_backward() {
-        let x = mu::fill::<1, 1, 3, 2>(2.0);
-        let z = x.sum();
-        assert!(equal_arrays(z.data(), constant!(12.0; 1,1,1,1)));
-
-        z.backward();
-        assert!(equal_arrays(x.grad().data(), constant!(1.0; 3,2,1,1)));
-    }
-
-    #[test]
     fn add_forward_backward() {
         let x = mu::eye::<1, 1, 3, 2>(3.0);
         let y = mu::fill::<1, 1, 3, 2>(2.0);
@@ -387,38 +346,5 @@ mod tests {
         z.backward();
         assert!(equal_arrays(x.grad().data(), constant!(2.0; 3,2,1,1)));
         assert!(equal_arrays(y.grad().data(), constant!(3.0; 2,4,1,1)));
-    }
-
-    #[test]
-    fn pow_forward_backward() {
-        let x = mu::fill::<1, 1, 3, 2>(2.0);
-        let y = mu::fill::<1, 1, 3, 2>(3.0);
-        let z = x.pow(&y);
-        assert!(equal_arrays(z.data(), constant!(8.0; 3,2,1,1)));
-
-        z.backward();
-        assert!(equal_arrays(x.grad().data(), constant!(12.0; 3,2,1,1)));
-        assert!(equal_arrays(y.grad().data(), constant!(5.5451775; 3,2,1,1)));
-    }
-
-    #[test]
-    fn maximum_forward_backward() {
-        let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let y = mu::fill::<1, 1, 3, 2>(2.0);
-        let z = x.maximum(&y);
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(&[3.0, 2.0, 2.0, 2.0, 3.0, 2.0], dim4!(3, 2, 1, 1))
-        ));
-
-        z.backward();
-        assert!(equal_arrays(
-            x.grad().data(),
-            Array::new(&[1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dim4!(3, 2, 1, 1))
-        ));
-        assert!(equal_arrays(
-            y.grad().data(),
-            Array::new(&[0.0, 1.0, 1.0, 1.0, 0.0, 1.0], dim4!(3, 2, 1, 1))
-        ));
     }
 }
