@@ -1,12 +1,12 @@
 # [![Mushin](assets/mushin-logo.svg)](https://github.com/c0dearm/mushin)
 
-[![Crates](https://img.shields.io/crates/v/mushin.svg)](https://crates.io/crates/mushin)
-[![Crates](https://img.shields.io/crates/d/mushin.svg)](https://crates.io/crates/mushin)
-[![Docs](https://docs.rs/mushin/badge.svg)](https://docs.rs/mushin)
-[![CI](https://github.com/c0dearm/mushin/workflows/CI/badge.svg?branch=main)](https://github.com/c0dearm/mushin/actions)
-[![Security](https://github.com/c0dearm/mushin/workflows/Security/badge.svg?branch=main)](https://github.com/c0dearm/mushin/actions)
-[![Codecov](https://codecov.io/gh/c0dearm/mushin/branch/main/graph/badge.svg)](https://codecov.io/gh/c0dearm/mushin)
-[![License](https://camo.githubusercontent.com/47069b7e06b64b608c692a8a7f40bc6915cf629c/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e73652d417061636865322e302532464d49542d626c75652e737667)](https://github.com/c0dearm/mushin/blob/master/COPYRIGHT)
+[![Crates](https://img.shields.io/crates/v/mushin.svg?style=for-the-badge)](https://crates.io/crates/mushin)
+[![Downloads](https://img.shields.io/crates/d/mushin.svg?style=for-the-badge)](https://crates.io/crates/mushin)
+[![Docs](https://img.shields.io/docsrs/mushin?style=for-the-badge)](https://docs.rs/mushin)
+[![Build](https://img.shields.io/github/workflow/status/c0dearm/mushin/CI/main?style=for-the-badge)](https://github.com/c0dearm/mushin/actions)
+[![Security](https://img.shields.io/github/workflow/status/c0dearm/mushin/Security/main?style=for-the-badge&label=Security)](https://github.com/c0dearm/mushin/actions)
+[![Coverage](https://img.shields.io/codecov/c/gh/c0dearm/mushin?style=for-the-badge)](https://codecov.io/gh/c0dearm/mushin)
+[![Slack](https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack)](https://mushin-rs.slack.com)
 
 [Mushin](https://en.wikipedia.org/wiki/Mushin_(mental_state)) is a Japanese term used in martial arts that refers to the state of mind obtained by practice. At this point, a person relies not on what they think should be the next move, but what is their trained natural reaction (or instinct).
 
@@ -74,16 +74,11 @@ for _ in 0..5 {
 }
 ```
 
-## Roadmap
-
-- [ ] Continue to add more deep learning utilities
-- [ ] Add benchmarks
-
 ## Contributing
 
-If you find a vulnerability, bug or would like a new feature, [open a new issue](https://github.com/c0dearm/mushin/issues/new).
-
-To introduce your changes into the codebase, submit a Pull Request.
+* If you find a vulnerability, bug or miss something, please [open a new issue](https://github.com/c0dearm/mushin/issues/new)
+* To introduce your changes into the codebase, submit a [pull request](https://github.com/c0dearm/mushin/pulls)
+* To discuss about possible improvements, suggestions and new fearures, [join us in Slack!](https://mushin-rs.slack.com)
 
 Many thanks!
 

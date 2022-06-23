@@ -20,4 +20,4 @@ default = ["nn"]
 nn = []
 
 [dependencies]
-arrayfire = "3.8"
+arrayfire = { git = "https://github.com/arrayfire/arrayfire-rust" }
