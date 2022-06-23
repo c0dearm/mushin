@@ -31,7 +31,12 @@ impl SGD {
     #[inline]
     pub fn step(&self) {
         for node in &self.params {
-            *node.data_mut() -= self.lr * &node.grad().clone();
+            let step = arrayfire::sub(
+                &node.data().clone(),
+                &(self.lr * &node.grad().clone()),
+                true,
+            );
+            *node.data_mut() = step;
         }
     }
 }

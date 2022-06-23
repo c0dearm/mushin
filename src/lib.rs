@@ -60,6 +60,8 @@
     clippy::shadow_unrelated,
     clippy::missing_inline_in_public_items
 )]
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 
 #[cfg(feature = "nn")]
 pub mod nn;

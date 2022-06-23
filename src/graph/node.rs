@@ -228,16 +228,20 @@ impl BinaryOp {
         match self.ancestors {
             BinaryParams::VarVar(ref ancestor_a, ref ancestor_b) => {
                 let (partial_a, partial_b) = (self.reverse)(df, self.args.as_slice());
-                *ancestor_a.grad_mut() += partial_a;
-                *ancestor_b.grad_mut() += partial_b;
+                let grad_a = arrayfire::add(&ancestor_a.grad().clone(), &partial_a, true);
+                let grad_b = arrayfire::add(&ancestor_b.grad().clone(), &partial_b, true);
+                *ancestor_a.grad_mut() = grad_a;
+                *ancestor_b.grad_mut() = grad_b;
             }
             BinaryParams::VarConst(ref ancestor) => {
                 let (partial, _) = (self.reverse)(df, self.args.as_slice());
-                *ancestor.grad_mut() += partial;
+                let grad = arrayfire::add(&ancestor.grad().clone(), &partial, true);
+                *ancestor.grad_mut() = grad;
             }
             BinaryParams::ConstVar(ref ancestor) => {
                 let (_, partial) = (self.reverse)(df, self.args.as_slice());
-                *ancestor.grad_mut() += partial;
+                let grad = arrayfire::add(&ancestor.grad().clone(), &partial, true);
+                *ancestor.grad_mut() = grad;
             }
         }
     }
