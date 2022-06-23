@@ -1,0 +1,34 @@
+name: Setup ArrayFire
+inputs:
+  version:
+    default: '3.8.0'
+    required: false 
+
+runs:
+  using: composite
+  steps:
+    - name: Cache ArrayFire
+      uses: actions/cache@v1
+      id: arrayfire
+      with:
+          path: afbin
+          key: ${{ runner.os }}-af-${{ inputs.version }}
+
+    - name: Download ArrayFire
+      # Only download and cache arrayfire if already not found
+      if: steps.arrayfire.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        wget --quiet http://arrayfire.s3.amazonaws.com/${{ inputs.version }}/ArrayFire-v${{ inputs.version }}_Linux_x86_64.sh
+        chmod +x ./ArrayFire-v${{ inputs.version }}_Linux_x86_64.sh
+        mkdir afbin
+        ./ArrayFire-v${{ inputs.version }}_Linux_x86_64.sh --skip-license --exclude-subdir --prefix=./afbin
+        rm ./afbin/lib64/libcu*.so*
+        rm ./afbin/lib64/libafcuda*.so*
+        rm ./ArrayFire-v${{ inputs.version }}_Linux_x86_64.sh
+
+    - name: Export ArrayFire paths
+      shell: bash
+      run: |
+        echo "AF_PATH=${GITHUB_WORKSPACE}/afbin" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${GITHUB_WORKSPACE}/afbin/lib64" >> $GITHUB_ENV
