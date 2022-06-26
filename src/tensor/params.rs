@@ -25,56 +25,69 @@ use crate::graph::node::{BinaryReverseFn, Node, UnaryReverseFn};
 use crate::tensor::{constant::Constant, variable::Variable};
 
 /// Determines the output of single parameter operations (unary)
-pub trait SingleParam<Y> {
-    /// Creates a new tensor with the given result as data and pushes it to the computation graph (if required)
-    fn push_unary(&self, result: Array<f32>, reverse: UnaryReverseFn, args: &[Array<f32>]) -> Y;
-}
+pub trait SingleParam<const YB: u64, const YC: u64, const YH: u64, const YW: u64> {
+    type Out;
 
-impl<
-        const B: u64,
-        const L: u64,
-        const R: u64,
-        const C: u64,
-        const YB: u64,
-        const YL: u64,
-        const YR: u64,
-        const YC: u64,
-    > SingleParam<Variable<YB, YL, YR, YC>> for Variable<B, L, R, C>
-{
+    /// Creates a new tensor with the given result as data and pushes it to the computation graph (if required)
     fn push_unary(
         &self,
         result: Array<f32>,
         reverse: UnaryReverseFn,
         args: &[Array<f32>],
-    ) -> Variable<YB, YL, YR, YC> {
+    ) -> Self::Out;
+}
+
+impl<
+        const XB: u64,
+        const XC: u64,
+        const XH: u64,
+        const XW: u64,
+        const YB: u64,
+        const YC: u64,
+        const YH: u64,
+        const YW: u64,
+    > SingleParam<YB, YC, YH, YW> for Variable<XB, XC, XH, XW>
+{
+    type Out = Variable<YB, YC, YH, YW>;
+
+    fn push_unary(
+        &self,
+        result: Array<f32>,
+        reverse: UnaryReverseFn,
+        args: &[Array<f32>],
+    ) -> Self::Out {
         let node = Node::unary(result, self.into(), reverse, args);
         Variable::new(self.tape().clone(), node)
     }
 }
 
 impl<
-        const B: u64,
-        const L: u64,
-        const R: u64,
-        const C: u64,
+        const XB: u64,
+        const XC: u64,
+        const XH: u64,
+        const XW: u64,
         const YB: u64,
-        const YL: u64,
-        const YR: u64,
         const YC: u64,
-    > SingleParam<Constant<YB, YL, YR, YC>> for Constant<B, L, R, C>
+        const YH: u64,
+        const YW: u64,
+    > SingleParam<YB, YC, YH, YW> for Constant<XB, XC, XH, XW>
 {
+    type Out = Constant<YB, YC, YH, YW>;
+
     fn push_unary(
         &self,
         result: Array<f32>,
         _reverse: UnaryReverseFn,
         _args: &[Array<f32>],
-    ) -> Constant<YB, YL, YR, YC> {
+    ) -> Self::Out {
         Constant::new(result)
     }
 }
 
 /// Determines the output of double parameter operations (binary)
-pub trait DoubleParam<Y, Z> {
+pub trait DoubleParam<const ZB: u64, const ZC: u64, const ZH: u64, const ZW: u64, Y> {
+    type Out;
+
     /// Creates a new tensor with the given result as data and pushes it to the computation graph (if required)
     fn push_binary(
         &self,
@@ -82,112 +95,120 @@ pub trait DoubleParam<Y, Z> {
         result: Array<f32>,
         reverse: BinaryReverseFn,
         args: &[Array<f32>],
-    ) -> Z;
+    ) -> Self::Out;
 }
 
 impl<
-        const B: u64,
-        const L: u64,
-        const R: u64,
-        const C: u64,
+        const XB: u64,
+        const XC: u64,
+        const XH: u64,
+        const XW: u64,
         const YB: u64,
-        const YL: u64,
-        const YR: u64,
         const YC: u64,
+        const YH: u64,
+        const YW: u64,
         const ZB: u64,
-        const ZL: u64,
-        const ZR: u64,
         const ZC: u64,
-    > DoubleParam<Variable<YB, YL, YR, YC>, Variable<ZB, ZL, ZR, ZC>> for Variable<B, L, R, C>
+        const ZH: u64,
+        const ZW: u64,
+    > DoubleParam<ZB, ZC, ZH, ZW, Variable<YB, YC, YH, YW>> for Variable<XB, XC, XH, XW>
 {
+    type Out = Variable<ZB, ZC, ZH, ZW>;
+
     fn push_binary(
         &self,
-        other: &Variable<YB, YL, YR, YC>,
+        other: &Variable<YB, YC, YH, YW>,
         result: Array<f32>,
         reverse: BinaryReverseFn,
         args: &[Array<f32>],
-    ) -> Variable<ZB, ZL, ZR, ZC> {
+    ) -> Self::Out {
         let node = Node::binary_varvar(result, (self.into(), other.into()), reverse, args);
         Variable::new(self.tape().merge(other.tape()), node)
     }
 }
 
 impl<
-        const B: u64,
-        const L: u64,
-        const R: u64,
-        const C: u64,
+        const XB: u64,
+        const XC: u64,
+        const XH: u64,
+        const XW: u64,
         const YB: u64,
-        const YL: u64,
-        const YR: u64,
         const YC: u64,
+        const YH: u64,
+        const YW: u64,
         const ZB: u64,
-        const ZL: u64,
-        const ZR: u64,
         const ZC: u64,
-    > DoubleParam<Constant<YB, YL, YR, YC>, Variable<ZB, ZL, ZR, ZC>> for Variable<B, L, R, C>
+        const ZH: u64,
+        const ZW: u64,
+    > DoubleParam<ZB, ZC, ZH, ZW, Constant<YB, YC, YH, YW>> for Variable<XB, XC, XH, XW>
 {
+    type Out = Variable<ZB, ZC, ZH, ZW>;
+
     fn push_binary(
         &self,
-        _other: &Constant<YB, YL, YR, YC>,
+        _other: &Constant<YB, YC, YH, YW>,
         result: Array<f32>,
         reverse: BinaryReverseFn,
         args: &[Array<f32>],
-    ) -> Variable<ZB, ZL, ZR, ZC> {
+    ) -> Self::Out {
         let node = Node::binary_varconst(result, self.into(), reverse, args);
-        Variable::new(self.tape().clone(), node)
+        Variable::new(self.tape().merge(self.tape()), node)
     }
 }
 
 impl<
-        const B: u64,
-        const L: u64,
-        const R: u64,
-        const C: u64,
+        const XB: u64,
+        const XC: u64,
+        const XH: u64,
+        const XW: u64,
         const YB: u64,
-        const YL: u64,
-        const YR: u64,
         const YC: u64,
+        const YH: u64,
+        const YW: u64,
         const ZB: u64,
-        const ZL: u64,
-        const ZR: u64,
         const ZC: u64,
-    > DoubleParam<Variable<YB, YL, YR, YC>, Variable<ZB, ZL, ZR, ZC>> for Constant<B, L, R, C>
+        const ZH: u64,
+        const ZW: u64,
+    > DoubleParam<ZB, ZC, ZH, ZW, Variable<YB, YC, YH, YW>> for Constant<XB, XC, XH, XW>
 {
+    type Out = Variable<ZB, ZC, ZH, ZW>;
+
     fn push_binary(
         &self,
-        other: &Variable<YB, YL, YR, YC>,
+        other: &Variable<YB, YC, YH, YW>,
         result: Array<f32>,
         reverse: BinaryReverseFn,
         args: &[Array<f32>],
-    ) -> Variable<ZB, ZL, ZR, ZC> {
+    ) -> Self::Out {
         let node = Node::binary_constvar(result, other.into(), reverse, args);
-        Variable::new(other.tape().clone(), node)
+        Variable::new(other.tape().merge(other.tape()), node)
     }
 }
 
 impl<
-        const B: u64,
-        const L: u64,
-        const R: u64,
-        const C: u64,
+        const XB: u64,
+        const XC: u64,
+        const XH: u64,
+        const XW: u64,
         const YB: u64,
-        const YL: u64,
-        const YR: u64,
         const YC: u64,
+        const YH: u64,
+        const YW: u64,
         const ZB: u64,
-        const ZL: u64,
-        const ZR: u64,
         const ZC: u64,
-    > DoubleParam<Constant<YB, YL, YR, YC>, Constant<ZB, ZL, ZR, ZC>> for Constant<B, L, R, C>
+        const ZH: u64,
+        const ZW: u64,
+    > DoubleParam<ZB, ZC, ZH, ZW, Constant<YB, YC, YH, YW>> for Constant<XB, XC, XH, XW>
 {
+    type Out = Constant<ZB, ZC, ZH, ZW>;
+
     fn push_binary(
         &self,
-        _other: &Constant<YB, YL, YR, YC>,
+        _other: &Constant<YB, YC, YH, YW>,
         result: Array<f32>,
         _reverse: BinaryReverseFn,
         _args: &[Array<f32>],
-    ) -> Constant<ZB, ZL, ZR, ZC> {
+    ) -> Self::Out {
         Constant::new(result)
     }
 }

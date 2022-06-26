@@ -2,6 +2,8 @@
 //!
 //! ## Usage
 //! ```rust
+//! #![allow(incomplete_features)]
+//! #![feature(associated_const_equality)]
 //! #![feature(generic_const_exprs)]
 //!
 //! use mushin as mu;

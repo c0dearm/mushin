@@ -3,9 +3,9 @@ use crate::tensor::{variable::Variable, Tensor};
 use arrayfire::Array;
 
 /// A non-differentiable tensor that's not tracked in the computation graph
-pub struct Constant<const B: u64, const L: u64, const R: u64, const C: u64>(Array<f32>);
+pub struct Constant<const B: u64, const C: u64, const H: u64, const W: u64>(Array<f32>);
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> Constant<B, L, R, C> {
+impl<const B: u64, const C: u64, const H: u64, const W: u64> Constant<B, C, H, W> {
     /// Creates a new constant
     pub(crate) const fn new(data: Array<f32>) -> Self {
         Self(data)
@@ -13,24 +13,27 @@ impl<const B: u64, const L: u64, const R: u64, const C: u64> Constant<B, L, R, C
 
     /// Consume this `Constant` tensor and return a `Variable` that is tracked in the
     /// computation graph from now on
-    pub fn unfreeze(self) -> Variable<B, L, R, C> {
+    pub fn unfreeze(self) -> Variable<B, C, H, W> {
         Variable::new(Tape::default(), Node::declaration(self.0))
     }
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> Tensor<B, L, R, C>
-    for Constant<B, L, R, C>
-{
+impl<const B: u64, const C: u64, const H: u64, const W: u64> Tensor for Constant<B, C, H, W> {
+    const BATCH: u64 = B;
+    const CHANNELS: u64 = C;
+    const HEIGHT: u64 = H;
+    const WIDTH: u64 = W;
+
     fn data(&self) -> Array<f32> {
         self.0.clone()
     }
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> From<&Constant<B, L, R, C>>
+impl<const B: u64, const C: u64, const H: u64, const W: u64> From<&Constant<B, C, H, W>>
     for Array<f32>
 {
     #[inline]
-    fn from(cons: &Constant<B, L, R, C>) -> Self {
+    fn from(cons: &Constant<B, C, H, W>) -> Self {
         cons.data()
     }
 }

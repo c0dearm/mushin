@@ -1,8 +1,5 @@
-use crate::tensor::{
-    constant::Constant,
-    params::{DoubleParam, SingleParam},
-    Tensor,
-};
+use crate::tensor::{params::SingleParam, Tensor};
+use arrayfire::Array;
 
 /// A Dropout neural network layer with. Generic `T` indicates if Dropout is in training mode (true) or not (false).
 /// During training mode dropout will set some values to zero with the given probability. Otherwise it behaves like
@@ -19,14 +16,18 @@ impl<const T: bool> Dropout<T> {
 
 impl Dropout<true> {
     #[inline]
-    pub fn forward<const B: u64, const L: u64, const R: u64, const C: u64, X>(&self, x: &X) -> X
+    pub fn forward<X>(&self, x: &X) -> X::Out
     where
-        X: Tensor<B, L, R, C> + DoubleParam<Constant<B, L, R, C>, X>,
+        X: Tensor + SingleParam<{ X::BATCH }, { X::CHANNELS }, { X::HEIGHT }, { X::WIDTH }>,
     {
-        let mask = Constant::new(
-            arrayfire::gt(&arrayfire::randu!(B, L, R, C), &self.0, false) / (1.0 - self.0),
-        );
-        x.mul(&mask)
+        let mask = arrayfire::gt(
+            &arrayfire::randu!(X::HEIGHT, X::WIDTH, X::CHANNELS, X::BATCH),
+            &self.0,
+            false,
+        ) / (1.0 - self.0);
+
+        let reverse = |df: &Array<f32>, args: &[Array<f32>]| df * &args[0];
+        x.push_unary(arrayfire::mul(&x.data(), &mask, false), reverse, &[mask])
     }
 
     #[must_use]
@@ -39,9 +40,9 @@ impl Dropout<true> {
 impl Dropout<false> {
     #[allow(clippy::unused_self)]
     #[inline]
-    pub fn forward<const B: u64, const L: u64, const R: u64, const C: u64, X>(&self, x: &X) -> X
+    pub fn forward<X>(&self, x: &X) -> X::Out
     where
-        X: Tensor<B, L, R, C> + SingleParam<X>,
+        X: Tensor + SingleParam<{ X::BATCH }, { X::CHANNELS }, { X::HEIGHT }, { X::WIDTH }>,
     {
         x.identity()
     }

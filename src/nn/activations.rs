@@ -3,11 +3,15 @@ use arrayfire::{Array, MatProp};
 
 /// Performs the `ReLu` activation function on the given tensor
 #[inline]
-pub fn relu<const B: u64, const L: u64, const R: u64, const C: u64, X>(x: &X) -> X
+pub fn relu<X>(x: &X) -> X::Out
 where
-    X: Tensor<B, L, R, C> + SingleParam<X>,
+    X: Tensor + SingleParam<{ X::BATCH }, { X::CHANNELS }, { X::HEIGHT }, { X::WIDTH }>,
 {
-    let result = arrayfire::maxof(&x.data(), &arrayfire::constant!(0.0f32; R,C,L,B), false);
+    let result = arrayfire::maxof(
+        &x.data(),
+        &arrayfire::constant!(0.0f32; X::HEIGHT,X::WIDTH,X::CHANNELS,X::BATCH),
+        false,
+    );
     let reverse =
         |df: &Array<f32>, args: &[Array<f32>]| df * arrayfire::gt(&args[0], &0.0f32, false);
     x.push_unary(result, reverse, &[x.data()])
@@ -15,9 +19,9 @@ where
 
 /// Performs the `Softmax` activation function on the given row vector
 #[inline]
-pub fn softmax<const B: u64, const C: u64, X>(x: &X) -> X
+pub fn softmax<X>(x: &X) -> X::Out
 where
-    X: Tensor<B, 1, 1, C> + SingleParam<X>,
+    X: Tensor<CHANNELS = 1, HEIGHT = 1> + SingleParam<{ X::BATCH }, 1, 1, { X::WIDTH }>,
 {
     // This is required for numerical stability
     let shift = arrayfire::sub(&x.data(), &arrayfire::max_all(&x.data()).0, true);
@@ -43,9 +47,9 @@ where
 
 /// Performs the `log(Softmax)` activation function on the given row vector
 #[inline]
-pub fn logsoftmax<const B: u64, const C: u64, X>(x: &X) -> X
+pub fn logsoftmax<X>(x: &X) -> X::Out
 where
-    X: Tensor<B, 1, 1, C> + SingleParam<X>,
+    X: Tensor<CHANNELS = 1, HEIGHT = 1> + SingleParam<{ X::BATCH }, 1, 1, { X::WIDTH }>,
 {
     // This is required for numerical stability
     let shift = arrayfire::sub(&x.data(), &arrayfire::max_all(&x.data()).0, true);
@@ -58,9 +62,9 @@ where
         arrayfire::matmul(
             df,
             &arrayfire::sub(
-                &arrayfire::identity::<f32>(arrayfire::dim4!(C, C, 1, B)),
+                &arrayfire::identity::<f32>(arrayfire::dim4!(X::WIDTH, X::WIDTH, 1, X::BATCH)),
                 &arrayfire::matmul(
-                    &arrayfire::constant!(1.0; C, 1, 1, B),
+                    &arrayfire::constant!(1.0; X::WIDTH, 1, 1, X::BATCH),
                     s,
                     MatProp::NONE,
                     MatProp::NONE,

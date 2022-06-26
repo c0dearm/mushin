@@ -9,22 +9,18 @@ pub struct Linear<const I: u64, const O: u64, W>(W);
 
 impl<const I: u64, const O: u64, W> Linear<I, O, W> {
     #[inline]
-    const fn new(weights: W) -> Self
-    where
-        W: Tensor<1, 1, { I + 1 }, O>,
-    {
+    const fn new(weights: W) -> Self {
         Self(weights)
     }
 
     /// Given an input computes the output
     #[inline]
-    pub fn forward<const B: u64, X, Y>(&self, x: &X) -> Y
+    pub fn forward<X>(&self, x: &X) -> X::Out
     where
-        W: Tensor<1, 1, { I + 1 }, O>,
-        X: Tensor<B, 1, 1, I> + DoubleParam<W, Y>,
-        Y: Tensor<B, 1, 1, O>,
+        W: Tensor<BATCH = 1, CHANNELS = 1, HEIGHT = { I + 1 }, WIDTH = { O }>,
+        X: Tensor<CHANNELS = 1, HEIGHT = 1, WIDTH = { I }> + DoubleParam<{ X::BATCH }, 1, 1, O, W>,
     {
-        let padded = arrayfire::join(1, &x.data(), &arrayfire::constant!(1.0; 1, 1, 1, B));
+        let padded = arrayfire::join(1, &x.data(), &arrayfire::constant!(1.0; 1, 1, 1, X::BATCH));
 
         let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
             let a = arrayfire::matmul(

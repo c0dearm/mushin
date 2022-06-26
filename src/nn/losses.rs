@@ -3,10 +3,9 @@ use arrayfire::Array;
 
 /// Calculates the Mean Squared Error between two row vectors
 #[inline]
-pub fn mse<const B: u64, const C: u64, X, Z>(x: &X, y: &Constant<B, 1, 1, C>) -> Z
+pub fn mse<X>(x: &X, y: &Constant<{ X::BATCH }, 1, 1, { X::WIDTH }>) -> X::Out
 where
-    X: Tensor<B, 1, 1, C> + SingleParam<Z>,
-    Z: Tensor<1, 1, 1, 1>,
+    X: Tensor<CHANNELS = 1, HEIGHT = 1> + SingleParam<{ X::BATCH }, 1, 1, { X::WIDTH }>,
 {
     let result = arrayfire::div(
         &arrayfire::constant!(arrayfire::sum_all(&arrayfire::pow(
@@ -14,7 +13,7 @@ where
         &2.0f32,
         false,
     )).0; 1,1,1,1),
-        &C,
+        &X::WIDTH,
         false,
     );
 
@@ -22,7 +21,7 @@ where
         df * (2.0f32
             * arrayfire::div(
                 &arrayfire::sum_all(&arrayfire::sub(&args[0], &args[1], false)).0,
-                &C,
+                &X::WIDTH,
                 false,
             ))
     };
@@ -32,10 +31,9 @@ where
 
 /// Calculates the Negative Log Likelihood among a set of classes
 #[inline]
-pub fn nll<const B: u64, const C: u64, X, Z>(x: &X, y: &Constant<B, 1, 1, C>) -> Z
+pub fn nll<X>(x: &X, y: &Constant<{ X::BATCH }, 1, 1, { X::WIDTH }>) -> X::Out
 where
-    X: Tensor<B, 1, 1, C> + SingleParam<Z>,
-    Z: Tensor<1, 1, 1, 1>,
+    X: Tensor<CHANNELS = 1, HEIGHT = 1> + SingleParam<{ X::BATCH }, 1, 1, { X::WIDTH }>,
 {
     let logits = arrayfire::log(&arrayfire::add(&y.data(), &1e-7f32, false));
     let result = arrayfire::constant!(-arrayfire::sum_all(&arrayfire::mul(
