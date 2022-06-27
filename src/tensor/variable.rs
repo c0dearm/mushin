@@ -4,12 +4,12 @@ use arrayfire::Array;
 use std::rc::Rc;
 
 /// A differentiable tensor being tracked in the computation graph
-pub struct Variable<const B: u64, const L: u64, const R: u64, const C: u64> {
+pub struct Variable<const B: u64, const C: u64, const H: u64, const W: u64> {
     tape: Tape,
     node: Rc<Node>,
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> Variable<B, L, R, C> {
+impl<const B: u64, const C: u64, const H: u64, const W: u64> Variable<B, C, H, W> {
     /// Creates a new variable. It assumes its node has already been pushed to the computation graph.
     pub(crate) fn new(mut tape: Tape, node: Node) -> Self {
         let node = Rc::new(node);
@@ -52,23 +52,26 @@ impl<const B: u64, const L: u64, const R: u64, const C: u64> Variable<B, L, R, C
 
     /// Consume this `Variable` tensor and return a `Constant` that is not tracked in the
     /// computation graph
-    pub fn freeze(self) -> Constant<B, L, R, C> {
+    pub fn freeze(self) -> Constant<B, C, H, W> {
         Constant::new(self.data())
     }
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> From<&Variable<B, L, R, C>>
+impl<const B: u64, const C: u64, const H: u64, const W: u64> From<&Variable<B, C, H, W>>
     for Rc<Node>
 {
     #[inline]
-    fn from(tensor: &Variable<B, L, R, C>) -> Self {
+    fn from(tensor: &Variable<B, C, H, W>) -> Self {
         tensor.node.clone()
     }
 }
 
-impl<const B: u64, const L: u64, const R: u64, const C: u64> Tensor<B, L, R, C>
-    for Variable<B, L, R, C>
-{
+impl<const B: u64, const C: u64, const H: u64, const W: u64> Tensor for Variable<B, C, H, W> {
+    const BATCH: u64 = B;
+    const CHANNELS: u64 = C;
+    const HEIGHT: u64 = H;
+    const WIDTH: u64 = W;
+
     fn data(&self) -> Array<f32> {
         self.node.data().clone()
     }

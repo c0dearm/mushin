@@ -26,16 +26,45 @@ use crate::tensor::params::{DoubleParam, SingleParam};
 use arrayfire::Array;
 
 /// Defines operations on tensors, either `Constant` or `Variable`
-pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized {
+pub trait Tensor {
+    const BATCH: u64;
+    const CHANNELS: u64;
+    const HEIGHT: u64;
+    const WIDTH: u64;
+
+    /// Returns the batch size
+    #[inline]
+    fn batch(&self) -> u64 {
+        Self::BATCH
+    }
+
+    /// Returns the number of channels
+    #[inline]
+    fn channels(&self) -> u64 {
+        Self::CHANNELS
+    }
+
+    /// Returns the number of rows
+    #[inline]
+    fn height(&self) -> u64 {
+        Self::HEIGHT
+    }
+
+    /// Returns the number of cols
+    #[inline]
+    fn width(&self) -> u64 {
+        Self::WIDTH
+    }
+
     /// Returns the tensor data as an `arrayfire` `Array`
     fn data(&self) -> Array<f32>;
 
     /// Does nothing
     #[must_use]
     #[inline]
-    fn identity(&self) -> Self
+    fn identity(&self) -> Self::Out
     where
-        Self: SingleParam<Self>,
+        Self: SingleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }>,
     {
         let reverse = |df: &Array<f32>, _: &[Array<f32>]| df.clone();
         self.push_unary(self.data(), reverse, &[])
@@ -43,23 +72,18 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
 
     /// Changes the shape of the tensor to the given dimensions
     #[inline]
-    fn reshape<
-        const BY: u64,
-        const LY: u64,
-        const RY: u64,
-        const CY: u64,
-        Y: Tensor<BY, LY, RY, CY>,
-    >(
-        &self,
-    ) -> Y
+    fn reshape<const B: u64, const C: u64, const H: u64, const W: u64>(&self) -> Self::Out
     where
-        Self: SingleParam<Y>,
+        Self: SingleParam<B, C, H, W>,
     {
         let reverse = |df: &Array<f32>, _: &[Array<f32>]| {
-            arrayfire::moddims(df, arrayfire::dim4!(R, C, L, B))
+            arrayfire::moddims(
+                df,
+                arrayfire::dim4!(Self::HEIGHT, Self::WIDTH, Self::CHANNELS, Self::BATCH),
+            )
         };
         self.push_unary(
-            arrayfire::moddims(&self.data(), arrayfire::dim4!(RY, CY, LY, BY)),
+            arrayfire::moddims(&self.data(), arrayfire::dim4!(H, W, C, B)),
             reverse,
             &[],
         )
@@ -68,9 +92,9 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     /// Computes `sin(x)`
     #[must_use]
     #[inline]
-    fn sin(&self) -> Self
+    fn sin(&self) -> Self::Out
     where
-        Self: SingleParam<Self>,
+        Self: SingleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }>,
     {
         let reverse = |df: &Array<f32>, args: &[Array<f32>]| df * arrayfire::cos(&args[0]);
         self.push_unary(arrayfire::sin(&self.data()), reverse, &[self.data()])
@@ -79,9 +103,9 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
     /// Computes `cos(x)`
     #[must_use]
     #[inline]
-    fn cos(&self) -> Self
+    fn cos(&self) -> Self::Out
     where
-        Self: SingleParam<Self>,
+        Self: SingleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }>,
     {
         let reverse = |df: &Array<f32>, args: &[Array<f32>]| df * -arrayfire::sin(&args[0]);
         self.push_unary(arrayfire::cos(&self.data()), reverse, &[self.data()])
@@ -89,9 +113,16 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
 
     /// Perform the element-wise addition of two tensors
     #[inline]
-    fn add<Y: Tensor<B, L, R, C>, Z: Tensor<B, L, R, C>>(&self, other: &Y) -> Z
+    fn add<Y>(&self, other: &Y) -> Self::Out
     where
-        Self: DoubleParam<Y, Z>,
+        Y: Tensor<
+            BATCH = { Self::BATCH },
+            CHANNELS = { Self::CHANNELS },
+            HEIGHT = { Self::HEIGHT },
+            WIDTH = { Self::WIDTH },
+        >,
+        Self:
+            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
     {
         let reverse = |df: &Array<f32>, _: &[Array<f32>]| (df.clone(), df.clone());
         self.push_binary(
@@ -104,9 +135,16 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
 
     /// Perform the element-wise substraction of two tensors
     #[inline]
-    fn sub<Y: Tensor<B, L, R, C>, Z: Tensor<B, L, R, C>>(&self, other: &Y) -> Z
+    fn sub<Y>(&self, other: &Y) -> Self::Out
     where
-        Self: DoubleParam<Y, Z>,
+        Y: Tensor<
+            BATCH = { Self::BATCH },
+            CHANNELS = { Self::CHANNELS },
+            HEIGHT = { Self::HEIGHT },
+            WIDTH = { Self::WIDTH },
+        >,
+        Self:
+            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
     {
         let reverse = |df: &Array<f32>, _: &[Array<f32>]| (df.clone(), -df.clone());
         self.push_binary(
@@ -119,9 +157,16 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
 
     /// Perform the element-wise multiplication of two tensors
     #[inline]
-    fn mul<Y: Tensor<B, L, R, C>, Z: Tensor<B, L, R, C>>(&self, other: &Y) -> Z
+    fn mul<Y>(&self, other: &Y) -> Self::Out
     where
-        Self: DoubleParam<Y, Z>,
+        Y: Tensor<
+            BATCH = { Self::BATCH },
+            CHANNELS = { Self::CHANNELS },
+            HEIGHT = { Self::HEIGHT },
+            WIDTH = { Self::WIDTH },
+        >,
+        Self:
+            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
     {
         let reverse = |df: &Array<f32>, args: &[Array<f32>]| (df * &args[1], df * &args[0]);
         self.push_binary(
@@ -134,9 +179,16 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
 
     /// Perform the element-wise division of two tensors
     #[inline]
-    fn div<Y: Tensor<B, L, R, C>, Z: Tensor<B, L, R, C>>(&self, other: &Y) -> Z
+    fn div<Y>(&self, other: &Y) -> Self::Out
     where
-        Self: DoubleParam<Y, Z>,
+        Y: Tensor<
+            BATCH = { Self::BATCH },
+            CHANNELS = { Self::CHANNELS },
+            HEIGHT = { Self::HEIGHT },
+            WIDTH = { Self::WIDTH },
+        >,
+        Self:
+            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
     {
         let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
             let (x, y) = (&args[0], &args[1]);
@@ -152,10 +204,12 @@ pub trait Tensor<const B: u64, const L: u64, const R: u64, const C: u64>: Sized 
 
     /// Perform the normal matrix multiplication of two tensors
     #[inline]
-    fn mm<const CY: u64, Y: Tensor<B, L, C, CY>, Z: Tensor<B, L, R, CY>>(&self, other: &Y) -> Z
+    fn mm<Y>(&self, other: &Y) -> Self::Out
     where
-        Self: DoubleParam<Y, Z>,
+        Y: Tensor<BATCH = { Self::BATCH }, CHANNELS = { Self::CHANNELS }, HEIGHT = { Self::WIDTH }>,
+        Self: DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Y::WIDTH }, Y>,
     {
+        // const CY: u64, Y: Tensor<B, L, C, CY>, Z: Tensor<B, L, R, CY>
         let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
             (
                 arrayfire::matmul(
@@ -213,7 +267,7 @@ mod tests {
     #[test]
     fn reshape_forward_backward() {
         let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let z = x.reshape::<1, 1, 1, 6, _>();
+        let z = x.reshape::<1, 1, 1, 6>();
         assert!(equal_arrays(
             z.data(),
             Array::new(&[3.0, 0.0, 0.0, 0.0, 3.0, 0.0], dim4!(1, 6, 1, 1))
