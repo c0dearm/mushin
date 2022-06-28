@@ -273,6 +273,11 @@ mod tests {
             Array::new(&[3.0, 0.0, 0.0, 0.0, 3.0, 0.0], dim4!(1, 6, 1, 1))
         ));
 
+        assert_eq!(z.batch(), 1);
+        assert_eq!(z.channels(), 1);
+        assert_eq!(z.height(), 1);
+        assert_eq!(z.width(), 6);
+
         z.backward();
         assert!(equal_arrays(
             x.grad().data(),
