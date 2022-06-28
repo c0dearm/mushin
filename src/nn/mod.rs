@@ -28,4 +28,5 @@
 pub mod activations;
 pub mod layers;
 pub mod losses;
+pub mod ops;
 pub mod optimizers;
