@@ -1,69 +1,137 @@
-use crate::graph::{node::Node, tape::Tape};
-use crate::tensor::{variable::Variable, Tensor};
+use crate::{
+    graph::node::{BinaryReverseFn, Node, UnaryReverseFn},
+    tensor::{
+        traits::{Data, Pair},
+        variable::Variable,
+    },
+};
 use arrayfire::Array;
 
-/// A non-differentiable tensor that's not tracked in the computation graph
-pub struct Constant<const B: u64, const C: u64, const H: u64, const W: u64>(Array<f32>);
+/// Data for a non-differentiable tensor not tracked in the computation graph
+#[derive(Clone)]
+pub struct Constant(Array<f32>);
 
-impl<const B: u64, const C: u64, const H: u64, const W: u64> Constant<B, C, H, W> {
-    /// Creates a new constant
-    pub(crate) const fn new(data: Array<f32>) -> Self {
+impl Constant {
+    /// Constructs constant data from a given array
+    pub fn new(data: Array<f32>) -> Self {
         Self(data)
-    }
-
-    /// Consume this `Constant` tensor and return a `Variable` that is tracked in the
-    /// computation graph from now on
-    pub fn unfreeze(self) -> Variable<B, C, H, W> {
-        Variable::new(Tape::default(), Node::declaration(self.0))
     }
 }
 
-impl<const B: u64, const C: u64, const H: u64, const W: u64> Tensor for Constant<B, C, H, W> {
-    const BATCH: u64 = B;
-    const CHANNELS: u64 = C;
-    const HEIGHT: u64 = H;
-    const WIDTH: u64 = W;
+impl Data for Constant {
+    fn push_unary(&self, data: Array<f32>, _reverse: UnaryReverseFn, _args: &[Array<f32>]) -> Self {
+        Self::new(data)
+    }
 
-    fn data(&self) -> Array<f32> {
+    fn values(&self) -> Array<f32> {
         self.0.clone()
     }
 }
 
-impl<const B: u64, const C: u64, const H: u64, const W: u64> From<&Constant<B, C, H, W>>
-    for Array<f32>
-{
-    #[inline]
-    fn from(cons: &Constant<B, C, H, W>) -> Self {
-        cons.data()
+impl Pair<Variable> for Constant {
+    type Output = Variable;
+
+    fn push_binary(
+        &self,
+        other: &Variable,
+        data: Array<f32>,
+        reverse: BinaryReverseFn,
+        args: &[Array<f32>],
+    ) -> Self::Output {
+        let node = Node::binary_constvar(data, other.node(), reverse, args);
+        Variable::new(other.tape().clone(), node)
+    }
+}
+
+impl Pair<Self> for Constant {
+    type Output = Self;
+
+    fn push_binary(
+        &self,
+        _other: &Self,
+        data: Array<f32>,
+        _reverse: BinaryReverseFn,
+        _args: &[Array<f32>],
+    ) -> Self::Output {
+        Self::new(data)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::Constant;
-    use crate::tensor::Tensor;
-    use crate::tests::equal_arrays;
+    use crate::graph::{node::Node, tape::Tape};
+    use crate::tensor::{
+        traits::{Data, Pair},
+        Variable,
+    };
+    use crate::tests::equal_data;
 
     #[test]
-    fn new_constant() {
-        let tensor = Constant::<3, 4, 2, 1>::new(arrayfire::constant!(5.0; 2,1,4,3));
-        assert!(equal_arrays(
-            (&tensor).into(),
-            arrayfire::constant!(5.0; 2,1,4,3)
+    fn new() {
+        let constant = Constant::new(arrayfire::constant!(5.0; 1,1,1,1));
+        assert!(equal_data(
+            constant.values(),
+            arrayfire::constant!(5.0; 1,1,1,1)
         ))
     }
 
     #[test]
-    fn constant_unfreeze() {
-        let tensor = Constant::<3, 4, 2, 1>::new(arrayfire::constant!(5.0; 2,1,4,3)).unfreeze();
-        assert!(equal_arrays(
-            tensor.data(),
-            arrayfire::constant!(5.0; 2,1,4,3)
-        ));
-        assert!(matches!(tensor.tape().nodes().len(), 1));
-        assert!(equal_arrays(
-            tensor.grad().data(),
-            arrayfire::constant!(0.0; 2,1,4,3)
-        ));
+    fn push_unary() {
+        let constant = Constant::new(arrayfire::constant!(5.0; 1,1,1,1));
+        let constant = constant.push_unary(
+            arrayfire::constant!(2.0; 1,1,1,1),
+            |_, _| arrayfire::constant!(1.0; 1,1,1,1),
+            &[],
+        );
+        assert!(equal_data(
+            constant.values(),
+            arrayfire::constant!(2.0; 1,1,1,1)
+        ))
+    }
+
+    #[test]
+    fn push_binary_constant() {
+        let constant = Constant::new(arrayfire::constant!(5.0; 1,1,1,1));
+        let other = Constant::new(arrayfire::constant!(4.0; 1,1,1,1));
+        let constant = constant.push_binary(
+            &other,
+            arrayfire::constant!(2.0; 1,1,1,1),
+            |_, _| {
+                (
+                    arrayfire::constant!(1.0; 1,1,1,1),
+                    arrayfire::constant!(1.0; 1,1,1,1),
+                )
+            },
+            &[],
+        );
+        assert!(equal_data(
+            constant.values(),
+            arrayfire::constant!(2.0; 1,1,1,1)
+        ))
+    }
+
+    #[test]
+    fn push_binary_variable() {
+        let constant = Constant::new(arrayfire::constant!(5.0; 1,1,1,1));
+        let other = Variable::new(
+            Tape::default(),
+            Node::declaration(arrayfire::constant!(4.0; 1,1,1,1)),
+        );
+        let variable = constant.push_binary(
+            &other,
+            arrayfire::constant!(2.0; 1,1,1,1),
+            |_, _| {
+                (
+                    arrayfire::constant!(1.0; 1,1,1,1),
+                    arrayfire::constant!(1.0; 1,1,1,1),
+                )
+            },
+            &[],
+        );
+        assert!(equal_data(
+            variable.grad(),
+            arrayfire::constant!(0.0; 1,1,1,1)
+        ))
     }
 }

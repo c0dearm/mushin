@@ -1,24 +1,25 @@
-use crate::tensor::{params::SingleParam, Tensor};
+use crate::{
+    ops::reshape,
+    tensor::{traits::Tensed, Tensor},
+};
 use arrayfire::{dim4, view, Array, Seq};
 
 // Given an input tensor, returns a tensor that keeps the same batch size, but with the rest
 // of the dimensions flattened to a vector.
 #[inline]
-pub fn flatten<X>(x: &X) -> X::Out
-where
-    X: Tensor + SingleParam<{ X::BATCH }, 1, 1, { X::CHANNELS * X::HEIGHT * X::WIDTH }>,
-{
-    x.reshape()
+pub fn flatten<X: Tensed>(
+    x: &X,
+) -> Tensor<{ X::BATCH }, 1, 1, { X::CHANNELS * X::HEIGHT * X::WIDTH }, X::Data> {
+    reshape(x)
 }
 
 // Performs the 2-dimensional max pooling operation on a given tensor.
-#[inline]
 #[allow(clippy::cast_possible_truncation)]
-pub fn maxpool2d<const H: u64, const W: u64, const S: u64, X>(x: &X) -> X::Out
+#[inline]
+pub fn maxpool2d<const H: u64, const W: u64, const S: u64, X: Tensed>(
+    x: &X,
+) -> Tensor<{ X::BATCH }, { X::CHANNELS }, { (X::HEIGHT - H) / S }, { (X::WIDTH - W) / S }, X::Data>
 where
-    X: Tensor
-        + SingleParam<{ X::BATCH }, { X::CHANNELS }, { (X::HEIGHT - H) / S }, { (X::WIDTH - W) / S }>,
-    X::Out: Tensor,
     [(); (X::BATCH * X::CHANNELS * (X::HEIGHT - H + 2) / S * (X::WIDTH - W + 2) / S) as usize]:,
     [(); ({ X::BATCH } * { X::CHANNELS } * { X::HEIGHT } * { X::WIDTH }) as usize]:,
 {
@@ -74,20 +75,19 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{flatten, maxpool2d};
+    use super::{flatten, maxpool2d, Tensed};
     use crate as mu;
-    use crate::tests::equal_arrays;
-    use crate::Tensor;
+    use crate::tests::equal_data;
     use arrayfire::Array;
 
     #[test]
     fn flatten_forward_backward() {
         let x = mu::fill::<2, 2, 3, 4>(2.0);
         let z = flatten(&x);
-        assert!(equal_arrays(z.data(), arrayfire::constant!(2.0; 1,24,1,2)));
+        assert!(equal_data(z.data(), arrayfire::constant!(2.0; 1,24,1,2)));
 
         z.backward();
-        assert!(equal_arrays(
+        assert!(equal_data(
             x.grad().data(),
             arrayfire::constant!(1.0; 3,4,2,2)
         ));
@@ -99,13 +99,13 @@ mod tests {
             10.0, 4.0, 18.0, 3.0, 12.0, 11.0, 13.0, 15.0, 8.0, 5.0, 7.0, 2.0, 7.0, 9.0, 7.0, 2.0,
         ]);
         let z = maxpool2d::<2, 2, 2, _>(&x);
-        assert!(equal_arrays(
+        assert!(equal_data(
             z.data(),
             Array::new(&[12.0, 18.0, 9.0, 7.0], arrayfire::dim4!(2, 2, 1, 1))
         ));
 
         z.backward();
-        assert!(equal_arrays(
+        assert!(equal_data(
             x.grad().data(),
             Array::new(
                 &[0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0],

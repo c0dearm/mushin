@@ -1,12 +1,11 @@
-use crate::tensor::{params::SingleParam, Tensor};
+use crate::tensor::{traits::Tensed, Tensor};
 use arrayfire::{Array, MatProp};
 
 /// Performs the `ReLu` activation function on the given tensor
 #[inline]
-pub fn relu<X>(x: &X) -> X::Out
-where
-    X: Tensor + SingleParam<{ X::BATCH }, { X::CHANNELS }, { X::HEIGHT }, { X::WIDTH }>,
-{
+pub fn relu<X: Tensed>(
+    x: &X,
+) -> Tensor<{ X::BATCH }, { X::CHANNELS }, { X::HEIGHT }, { X::WIDTH }, X::Data> {
     let result = arrayfire::maxof(
         &x.data(),
         &arrayfire::constant!(0.0f32; X::HEIGHT,X::WIDTH,X::CHANNELS,X::BATCH),
@@ -19,10 +18,9 @@ where
 
 /// Performs the `Softmax` activation function on the given row vector
 #[inline]
-pub fn softmax<X>(x: &X) -> X::Out
-where
-    X: Tensor<CHANNELS = 1, HEIGHT = 1> + SingleParam<{ X::BATCH }, 1, 1, { X::WIDTH }>,
-{
+pub fn softmax<X: Tensed<CHANNELS = 1, HEIGHT = 1>>(
+    x: &X,
+) -> Tensor<{ X::BATCH }, 1, 1, { X::WIDTH }, X::Data> {
     // This is required for numerical stability
     let shift = arrayfire::sub(&x.data(), &arrayfire::max_all(&x.data()).0, true);
     let exps = arrayfire::exp(&shift);
@@ -47,10 +45,9 @@ where
 
 /// Performs the `log(Softmax)` activation function on the given row vector
 #[inline]
-pub fn logsoftmax<X>(x: &X) -> X::Out
-where
-    X: Tensor<CHANNELS = 1, HEIGHT = 1> + SingleParam<{ X::BATCH }, 1, 1, { X::WIDTH }>,
-{
+pub fn logsoftmax<X: Tensed<CHANNELS = 1, HEIGHT = 1>>(
+    x: &X,
+) -> Tensor<{ X::BATCH }, 1, 1, { X::WIDTH }, X::Data> {
     // This is required for numerical stability
     let shift = arrayfire::sub(&x.data(), &arrayfire::max_all(&x.data()).0, true);
     let exps = arrayfire::exp(&shift);
@@ -83,8 +80,8 @@ where
 mod tests {
     use super::{logsoftmax, relu, softmax};
     use crate as mu;
-    use crate::tests::equal_arrays;
-    use crate::Tensor;
+    use crate::tensor::traits::Tensed;
+    use crate::tests::equal_data;
     use arrayfire::{dim4, Array};
 
     #[test]
@@ -92,13 +89,13 @@ mod tests {
         let x = mu::custom::<1, 1, 2, 3>(&[1.0, -1.0, -1.0, 1.0, -1.0, -1.0]);
         let z = relu(&x);
 
-        assert!(equal_arrays(
+        assert!(equal_data(
             z.data(),
             arrayfire::identity(arrayfire::dim4!(2, 3, 1, 1))
         ));
 
         z.backward();
-        assert!(equal_arrays(
+        assert!(equal_data(
             x.grad().data(),
             arrayfire::identity(arrayfire::dim4!(2, 3, 1, 1))
         ));
@@ -109,13 +106,13 @@ mod tests {
         let x = mu::custom::<1, 1, 1, 3>(&[0.3, 0.2, 0.5]);
         let z = softmax(&x);
 
-        assert!(equal_arrays(
+        assert!(equal_data(
             z.data(),
             Array::new(&[0.31987306, 0.28943312, 0.39069384], dim4!(1, 3, 1, 1)),
         ));
 
         z.backward();
-        assert!(equal_arrays(
+        assert!(equal_data(
             x.grad().data(),
             Array::new(&[0.0, 0.0, 0.0], dim4!(1, 3, 1, 1)),
         ));
@@ -126,13 +123,13 @@ mod tests {
         let x = mu::custom::<1, 1, 1, 3>(&[0.3, 0.2, 0.5]);
         let z = logsoftmax(&x);
 
-        assert!(equal_arrays(
+        assert!(equal_data(
             z.data(),
             Array::new(&[-1.1398311, -1.239831, -0.939831], dim4!(1, 3, 1, 1)),
         ));
 
         z.backward();
-        assert!(equal_arrays(
+        assert!(equal_data(
             x.grad().data(),
             Array::new(&[0.04038084, 0.13170063, -0.17208147], dim4!(1, 3, 1, 1)),
         ));
