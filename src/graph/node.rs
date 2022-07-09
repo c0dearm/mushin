@@ -1,7 +1,9 @@
 use arrayfire::{constant, Array};
-use std::cell::{Ref, RefCell, RefMut};
-use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    rc::Rc,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -250,16 +252,16 @@ impl BinaryOp {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{Node, Origin};
-    use crate::tests::equal_arrays;
+    use crate::tests::equal_data;
 
     #[test]
     fn new_node() {
         let node = Node::new(arrayfire::constant!(2.0; 1,2,3,4), Origin::Declaration);
-        assert!(equal_arrays(
+        assert!(equal_data(
             node.data().clone(),
             arrayfire::constant!(2.0; 1,2,3,4)
         ));
-        assert!(equal_arrays(
+        assert!(equal_data(
             node.grad().clone(),
             arrayfire::constant!(0.0; 1,2,3,4)
         ));
@@ -292,7 +294,7 @@ pub(crate) mod tests {
     fn ones_grad() {
         let node = Node::new(arrayfire::constant!(2.0; 1,2,3,4), Origin::Declaration);
         node.ones_grad();
-        assert!(equal_arrays(
+        assert!(equal_data(
             node.grad().clone(),
             arrayfire::constant!(1.0; 1,2,3,4)
         ));
@@ -302,7 +304,7 @@ pub(crate) mod tests {
     fn zero_grad() {
         let node = Node::new(arrayfire::constant!(2.0; 1,2,3,4), Origin::Declaration);
         node.zero_grad();
-        assert!(equal_arrays(
+        assert!(equal_data(
             node.grad().clone(),
             arrayfire::constant!(0.0; 1,2,3,4)
         ));

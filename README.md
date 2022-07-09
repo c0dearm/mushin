@@ -18,7 +18,7 @@ Internally it uses the [arrayfire](https://crates.io/crates/arrayfire) crate to 
 
 One clear benefit of this crate versus `PyTorch` is `Rust`'s strong type system. All operations performed on tensors during the graph build are checked at compile time for mathematical soundness, which means no runtime error after an hour of model training. **If it compiles, it works**. If at some point you make a mistake while building your made in hell nested computational graph, like for example on the shape of a tensor, you'll be stopped even before you can start feeling stupid.
 
-Moreover, because constant and variable tensors are actually different types, the developer continuously has an overview of which resulting tensors contribute to the gradients and which not. What's more, the compiler will stop you from trying to compute the gradient of or with respect to a constant!
+Moreover, because constant and variable tensors are actually different types, the developer continuously has an overview of which resulting tensors contribute to the gradients and which not. On top of that, the compiler will stop you from trying to compute the gradient of or with respect to a constant!
 
 Another benefit when compared to other similar libraries is that the computation graph is eagerly evaluated, which means that the graph is **trully dynamic**. In other words, your next operations can be conditioned to the results of previous ones, and so you can have conditional branching while
 building your graph.
@@ -37,14 +37,13 @@ mushin = "0.5"
 The following is quite a self-explanatory example of the basic usage of **Mushin** to build computation graphs and get the derivatives back:
 ```rust
 use mushin as mu;
-use mu::Tensor;
 
 fn main() {
     let x = mu::eye::<1, 1, 2, 3>(3.0).freeze();
     let w = mu::randn::<1, 1, 3, 2>();
     let b = mu::fill::<1, 1, 3, 3>(0.0);
 
-    let z = w.mm(&x).add(&b);
+    let z = mu::add(&mu::mm(&w, &x), &b);
     z.backward();
 
     let dz_dw = w.grad()
@@ -61,8 +60,8 @@ use mu::nn::{layers::Linear, activations::relu, losses::mse, optimizers::SGD};
 let x = mu::eye::<16, 1, 1, 3>(1.0).freeze();
 let y = mu::eye::<16, 1, 1, 5>(3.0).freeze();
 
-let linear = Linear::<16, 3, 5, _, _>::new();
-let optim = SGD::new(&linear.parameters(), 0.01);
+let linear = Linear::<16, 3, 5>::new();
+let optim = SGD::new(&[linear.parameters()], 0.01);
 
 for _ in 0..5 {
     let z = relu(&linear.forward(&x));

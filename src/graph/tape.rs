@@ -1,5 +1,4 @@
-use crate::graph::node::Node;
-pub use crate::graph::node::{BinaryReverseFn, NodeId, UnaryReverseFn};
+use crate::graph::node::{Node, NodeId};
 use std::collections::{btree_map::Values, BTreeMap};
 use std::rc::Rc;
 

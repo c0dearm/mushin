@@ -2,8 +2,6 @@
 //!
 //! ## Usage
 //! ```rust
-//! #![allow(incomplete_features)]
-//! #![feature(associated_const_equality)]
 //! #![feature(generic_const_exprs)]
 //!
 //! use mushin as mu;
@@ -12,7 +10,7 @@
 //! let x = mu::eye::<16, 1, 1, 3>(1.0).freeze();
 //! let y = mu::eye::<16, 1, 1, 5>(3.0).freeze();
 //!
-//! let linear = Linear::<3, 5, _>::randn();
+//! let linear = Linear::<3, 5>::randn();
 //! let optim = SGD::new(&[linear.parameters()], 0.01);
 //!
 //! for _ in 0..5 {

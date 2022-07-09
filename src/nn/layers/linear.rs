@@ -1,24 +1,34 @@
-use crate as mu;
-use crate::graph::node::Node;
-use crate::tensor::{constant::Constant, params::DoubleParam, variable::Variable, Tensor};
+use crate::{
+    graph::node::Node,
+    tensor::{
+        constant::Constant,
+        traits::{Data, Pair, Tensed},
+        variable::Variable,
+        Tensor,
+    },
+};
 use arrayfire::{seq, view, Array, MatProp};
 use std::rc::Rc;
 
 /// A Linear (perceptron) neural network layer with `I` input size and `O` output size
-pub struct Linear<const I: u64, const O: u64, W>(W);
+#[allow(clippy::cast_possible_truncation)]
+pub struct Linear<const I: u64, const O: u64, T: Data = Variable>(Tensor<1, 1, { I + 1 }, O, T>)
+where
+    [(); (I + 1) as usize]:;
 
-impl<const I: u64, const O: u64, W> Linear<I, O, W> {
-    #[inline]
-    const fn new(weights: W) -> Self {
-        Self(weights)
-    }
-
+#[allow(clippy::cast_possible_truncation)]
+impl<const I: u64, const O: u64, T: Data> Linear<I, O, T>
+where
+    [(); (I + 1) as usize]:,
+{
     /// Given an input computes the output
     #[inline]
-    pub fn forward<X>(&self, x: &X) -> X::Out
+    pub fn forward<X: Tensed<CHANNELS = 1, HEIGHT = 1, WIDTH = { I }>>(
+        &self,
+        x: &X,
+    ) -> Tensor<{ X::BATCH }, 1, 1, O, <X::Data as Pair<T>>::Output>
     where
-        W: Tensor<BATCH = 1, CHANNELS = 1, HEIGHT = { I + 1 }, WIDTH = { O }>,
-        X: Tensor<CHANNELS = 1, HEIGHT = 1, WIDTH = { I }> + DoubleParam<{ X::BATCH }, 1, 1, O, W>,
+        <X as Tensed>::Data: Pair<T>,
     {
         let padded = arrayfire::join(1, &x.data(), &arrayfire::constant!(1.0; 1, 1, 1, X::BATCH));
 
@@ -50,33 +60,43 @@ impl<const I: u64, const O: u64, W> Linear<I, O, W> {
     }
 }
 
-impl<const I: u64, const O: u64> Linear<I, O, Variable<1, 1, { I + 1 }, O>> {
+#[allow(clippy::cast_possible_truncation)]
+impl<const I: u64, const O: u64> Linear<I, O, Variable>
+where
+    [(); (I + 1) as usize]:,
+{
+    /// Returns a new Linear layer with its weights and biases taken from a normal
+    /// distribution with mean 0 and standard deviation 1
     #[must_use]
     #[inline]
     pub fn randn() -> Self {
-        Self::new(mu::randn())
+        Self(crate::randn())
     }
 
-    /// Consumes this layer and returns a copy with constant parameters
+    /// Consumes this layer and returns it with constant (not trainable) parameters
     #[must_use]
     #[inline]
-    pub fn freeze(self) -> Linear<I, O, Constant<1, 1, { I + 1 }, O>> {
+    pub fn freeze(self) -> Linear<I, O, Constant> {
         Linear(self.0.freeze())
     }
 
-    /// Returns the layer's trainable parameters
+    /// Get the layer's trainable parameters
     #[must_use]
     #[inline]
     pub fn parameters(&self) -> Rc<Node> {
-        (&self.0).into()
+        self.0.inner().node()
     }
 }
 
-impl<const I: u64, const O: u64> Linear<I, O, Constant<1, 1, { I + 1 }, O>> {
-    /// Consumes this layer and returns a copy with trainable parameters
+#[allow(clippy::cast_possible_truncation)]
+impl<const I: u64, const O: u64> Linear<I, O, Constant>
+where
+    [(); (I + 1) as usize]:,
+{
+    /// Consumes this layer and returns it with variable (trainable) parameters
     #[must_use]
     #[inline]
-    pub fn unfreeze(self) -> Linear<I, O, Variable<1, 1, { I + 1 }, O>> {
+    pub fn unfreeze(self) -> Linear<I, O, Variable> {
         Linear(self.0.unfreeze())
     }
 }
@@ -85,27 +105,24 @@ impl<const I: u64, const O: u64> Linear<I, O, Constant<1, 1, { I + 1 }, O>> {
 mod tests {
     use super::Linear;
     use crate as mu;
-    use crate::tests::equal_arrays;
-    use crate::Tensor;
+    use crate::tensor::traits::Tensed;
+    use crate::tests::equal_data;
     use arrayfire::Array;
 
     #[test]
     fn linear_forward_backward() {
-        let linear = Linear::<3, 5, _>::new(mu::fill::<1, 1, 4, 5>(1.0));
+        let linear = Linear::<3, 5>(mu::fill(1.0));
         let x = mu::fill::<1, 1, 1, 3>(0.5);
 
         let z = linear.forward(&x);
-        assert!(equal_arrays(
-            z.data(),
-            arrayfire::constant!(2.5; 1, 5, 1, 1)
-        ));
+        assert!(equal_data(z.data(), arrayfire::constant!(2.5; 1, 5, 1, 1)));
 
         z.backward();
-        assert!(equal_arrays(
+        assert!(equal_data(
             x.grad().data(),
             arrayfire::constant!(5.0; 1, 3, 1, 1)
         ));
-        assert!(equal_arrays(
+        assert!(equal_data(
             linear.parameters().grad().clone(),
             Array::new(
                 &[
@@ -119,7 +136,7 @@ mod tests {
 
     #[test]
     fn linear_freeze_unfreeze() {
-        let linear = Linear::<3, 5, _>::randn();
+        let linear = Linear::<3, 5>::randn();
         let linear = linear.freeze();
         let _ = linear.unfreeze();
     }

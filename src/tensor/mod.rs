@@ -1,17 +1,17 @@
-//! This module includes the `Tensor` trait, which is implemeneted for the
-//! `Variable` and `Constant` types.
+//! This module includes the `Tensor` type, which holds either `Variable`
+//! or `Constant` data.
 //!
-//! `Variable` tensors are tracked in the computation graph, so they are
+//! `Variable` tensors are tracked in the computation graph, they are
 //! differentiable and include methods like `backward` and `grad` to
 //! respectively compute and retrieve the gradients.
 //!
 //! `Constant` tensors are not tracked so they are not differentiable and
 //! do not have the `backward` and `grad` methods.
 //!
-//! `Variable` and `Constant` types are interoperable in the sense that you
+//! `Variable` and `Constant` tensors are interoperable in the sense that you
 //! can perform any operation between them no matter the combination of types.
-//! Check the `params` module for a description on how the combination of the
-//! operands influence the type of the output.
+//! Only operations between constants will result in a `Constant` tensor, otherwise
+//! a `Variable` tensor is returned.
 //!
 //! At any time a `Variable` tensor can be frozen by calling the `freeze` method,
 //! which will consume it and return a `Constant`. In the same fashion, a `Constant`
@@ -19,391 +19,112 @@
 //! tracked in the computation graph.
 
 pub mod constant;
-pub mod params;
+pub mod traits;
 pub mod variable;
 
-use crate::tensor::params::{DoubleParam, SingleParam};
+use crate::graph::{
+    node::{BinaryReverseFn, Node, UnaryReverseFn},
+    tape::Tape,
+};
 use arrayfire::Array;
+use constant::Constant;
+use traits::{Data, Pair, Tensed};
+use variable::Variable;
 
-/// Defines operations on tensors, either `Constant` or `Variable`
-pub trait Tensor {
-    const BATCH: u64;
-    const CHANNELS: u64;
-    const HEIGHT: u64;
-    const WIDTH: u64;
+#[derive(Clone)]
+pub struct Tensor<const B: u64, const C: u64, const H: u64, const W: u64, D: Data>(D);
 
-    /// Returns the batch size
-    #[inline]
-    fn batch(&self) -> u64 {
-        Self::BATCH
-    }
-
-    /// Returns the number of channels
-    #[inline]
-    fn channels(&self) -> u64 {
-        Self::CHANNELS
-    }
-
-    /// Returns the number of rows
-    #[inline]
-    fn height(&self) -> u64 {
-        Self::HEIGHT
-    }
-
-    /// Returns the number of cols
-    #[inline]
-    fn width(&self) -> u64 {
-        Self::WIDTH
-    }
-
-    /// Returns the tensor data as an `arrayfire` `Array`
-    fn data(&self) -> Array<f32>;
-
-    /// Does nothing
-    #[must_use]
-    #[inline]
-    fn identity(&self) -> Self::Out
-    where
-        Self: SingleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }>,
-    {
-        let reverse = |df: &Array<f32>, _: &[Array<f32>]| df.clone();
-        self.push_unary(self.data(), reverse, &[])
-    }
-
-    /// Changes the shape of the tensor to the given dimensions
-    #[inline]
-    fn reshape<const B: u64, const C: u64, const H: u64, const W: u64>(&self) -> Self::Out
-    where
-        Self: SingleParam<B, C, H, W>,
-    {
-        let reverse = |df: &Array<f32>, _: &[Array<f32>]| {
-            arrayfire::moddims(
-                df,
-                arrayfire::dim4!(Self::HEIGHT, Self::WIDTH, Self::CHANNELS, Self::BATCH),
-            )
-        };
-        self.push_unary(
-            arrayfire::moddims(&self.data(), arrayfire::dim4!(H, W, C, B)),
-            reverse,
-            &[],
-        )
-    }
-
-    /// Computes `sin(x)`
-    #[must_use]
-    #[inline]
-    fn sin(&self) -> Self::Out
-    where
-        Self: SingleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }>,
-    {
-        let reverse = |df: &Array<f32>, args: &[Array<f32>]| df * arrayfire::cos(&args[0]);
-        self.push_unary(arrayfire::sin(&self.data()), reverse, &[self.data()])
-    }
-
-    /// Computes `cos(x)`
-    #[must_use]
-    #[inline]
-    fn cos(&self) -> Self::Out
-    where
-        Self: SingleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }>,
-    {
-        let reverse = |df: &Array<f32>, args: &[Array<f32>]| df * -arrayfire::sin(&args[0]);
-        self.push_unary(arrayfire::cos(&self.data()), reverse, &[self.data()])
-    }
-
-    /// Perform the element-wise addition of two tensors
-    #[inline]
-    fn add<Y>(&self, other: &Y) -> Self::Out
-    where
-        Y: Tensor<
-            BATCH = { Self::BATCH },
-            CHANNELS = { Self::CHANNELS },
-            HEIGHT = { Self::HEIGHT },
-            WIDTH = { Self::WIDTH },
-        >,
-        Self:
-            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
-    {
-        let reverse = |df: &Array<f32>, _: &[Array<f32>]| (df.clone(), df.clone());
-        self.push_binary(
-            other,
-            arrayfire::add(&self.data(), &other.data(), false),
-            reverse,
-            &[],
-        )
-    }
-
-    /// Perform the element-wise substraction of two tensors
-    #[inline]
-    fn sub<Y>(&self, other: &Y) -> Self::Out
-    where
-        Y: Tensor<
-            BATCH = { Self::BATCH },
-            CHANNELS = { Self::CHANNELS },
-            HEIGHT = { Self::HEIGHT },
-            WIDTH = { Self::WIDTH },
-        >,
-        Self:
-            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
-    {
-        let reverse = |df: &Array<f32>, _: &[Array<f32>]| (df.clone(), -df.clone());
-        self.push_binary(
-            other,
-            arrayfire::sub(&self.data(), &other.data(), false),
-            reverse,
-            &[],
-        )
-    }
-
-    /// Perform the element-wise multiplication of two tensors
-    #[inline]
-    fn mul<Y>(&self, other: &Y) -> Self::Out
-    where
-        Y: Tensor<
-            BATCH = { Self::BATCH },
-            CHANNELS = { Self::CHANNELS },
-            HEIGHT = { Self::HEIGHT },
-            WIDTH = { Self::WIDTH },
-        >,
-        Self:
-            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
-    {
-        let reverse = |df: &Array<f32>, args: &[Array<f32>]| (df * &args[1], df * &args[0]);
-        self.push_binary(
-            other,
-            arrayfire::mul(&self.data(), &other.data(), false),
-            reverse,
-            &[self.data(), other.data()],
-        )
-    }
-
-    /// Perform the element-wise division of two tensors
-    #[inline]
-    fn div<Y>(&self, other: &Y) -> Self::Out
-    where
-        Y: Tensor<
-            BATCH = { Self::BATCH },
-            CHANNELS = { Self::CHANNELS },
-            HEIGHT = { Self::HEIGHT },
-            WIDTH = { Self::WIDTH },
-        >,
-        Self:
-            DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Self::WIDTH }, Y>,
-    {
-        let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
-            let (x, y) = (&args[0], &args[1]);
-            (df / y, -(df * x / y / y))
-        };
-        self.push_binary(
-            other,
-            arrayfire::div(&self.data(), &other.data(), false),
-            reverse,
-            &[self.data(), other.data()],
-        )
-    }
-
-    /// Perform the normal matrix multiplication of two tensors
-    #[inline]
-    fn mm<Y>(&self, other: &Y) -> Self::Out
-    where
-        Y: Tensor<BATCH = { Self::BATCH }, CHANNELS = { Self::CHANNELS }, HEIGHT = { Self::WIDTH }>,
-        Self: DoubleParam<{ Self::BATCH }, { Self::CHANNELS }, { Self::HEIGHT }, { Y::WIDTH }, Y>,
-    {
-        // const CY: u64, Y: Tensor<B, L, C, CY>, Z: Tensor<B, L, R, CY>
-        let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
-            (
-                arrayfire::matmul(
-                    df,
-                    &args[1],
-                    arrayfire::MatProp::NONE,
-                    arrayfire::MatProp::TRANS,
-                ),
-                arrayfire::matmul(
-                    &args[0],
-                    df,
-                    arrayfire::MatProp::TRANS,
-                    arrayfire::MatProp::NONE,
-                ),
-            )
-        };
-        self.push_binary(
-            other,
-            arrayfire::matmul(
-                &self.data(),
-                &other.data(),
-                arrayfire::MatProp::NONE,
-                arrayfire::MatProp::NONE,
-            ),
-            reverse,
-            &[self.data(), other.data()],
-        )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate as mu;
-    use crate::{tensor::Tensor, tests::equal_arrays};
-    use arrayfire::{constant, dim4, Array};
-
-    // All result comparisons are taken from performing the exact same operations on Tensorflow
-
-    #[test]
-    fn identity_forward_backward() {
-        let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let z = x.identity();
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(&[3.0, 0.0, 0.0, 0.0, 3.0, 0.0], dim4!(3, 2, 1, 1))
-        ));
-
-        z.backward();
-        assert!(equal_arrays(
-            x.grad().data(),
-            Array::new(&[1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dim4!(3, 2, 1, 1))
-        ));
-    }
-
-    #[test]
-    fn reshape_forward_backward() {
-        let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let z = x.reshape::<1, 1, 1, 6>();
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(&[3.0, 0.0, 0.0, 0.0, 3.0, 0.0], dim4!(1, 6, 1, 1))
-        ));
-
-        assert_eq!(z.batch(), 1);
-        assert_eq!(z.channels(), 1);
-        assert_eq!(z.height(), 1);
-        assert_eq!(z.width(), 6);
-
-        z.backward();
-        assert!(equal_arrays(
-            x.grad().data(),
-            Array::new(&[1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dim4!(3, 2, 1, 1))
-        ));
-    }
-
-    #[test]
-    fn sin_forward_backward() {
-        let x = mu::eye::<1, 1, 2, 3>(0.5);
-        let z = x.sin();
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(
-                &[0.479425538604203, 0.0, 0.0, 0.479425538604203, 0.0, 0.0],
-                dim4!(2, 3, 1, 1),
-            ),
-        ));
-
-        z.backward();
-        assert!(equal_arrays(
-            x.grad().data(),
-            Array::new(
-                &[0.8775825618903728, 1.0, 1.0, 0.8775825618903728, 1.0, 1.0],
-                dim4!(2, 3, 1, 1),
-            ),
+impl<const B: u64, const C: u64, const H: u64, const W: u64> Tensor<B, C, H, W, Variable> {
+    /// Returns the tensor gradients as another variable tensor
+    pub fn grad(&self) -> Self {
+        Self(Variable::new(
+            Tape::default(),
+            Node::declaration(self.0.grad()),
         ))
     }
 
-    #[test]
-    fn cos_forward_backward() {
-        let x = mu::eye::<1, 1, 2, 3>(0.5);
-        let z = x.cos();
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(
-                &[0.8775825618903728, 1.0, 1.0, 0.8775825618903728, 1.0, 1.0],
-                dim4!(2, 3, 1, 1),
-            ),
-        ));
-
-        z.backward();
-        assert!(equal_arrays(
-            x.grad().data(),
-            Array::new(
-                &[-0.479425538604203, 0.0, 0.0, -0.479425538604203, 0.0, 0.0],
-                dim4!(2, 3, 1, 1),
-            ),
-        ));
+    /// Consumes the variable tensor and returns it as a constant tensor
+    pub fn freeze(self) -> Tensor<B, C, H, W, Constant> {
+        Tensor(Constant::new(self.data()))
     }
 
-    #[test]
-    fn add_forward_backward() {
-        let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let y = mu::fill::<1, 1, 3, 2>(2.0);
-        let z = x.add(&y);
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(&[5.0, 2.0, 2.0, 2.0, 5.0, 2.0], dim4!(3, 2, 1, 1))
-        ));
-
-        z.backward();
-        assert!(equal_arrays(x.grad().data(), constant!(1.0; 3,2,1,1)));
-        assert!(equal_arrays(y.grad().data(), constant!(1.0; 3,2,1,1)));
+    /// Starting from this tensor node, compute the reverse auto differentiation.
+    /// Once called, all the ancestor nodes for which this tensor depends on will have
+    /// their gradients filled with the derivative with respect to this tensor
+    pub fn backward(&self) {
+        // derivative of self wrt to self is one
+        self.0.node().ones_grad();
+        for node in self.0.tape().nodes().rev() {
+            node.reverse();
+        }
     }
 
-    #[test]
-    fn sub_forward_backward() {
-        let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let y = mu::fill::<1, 1, 3, 2>(2.0);
-        let z = x.sub(&y);
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(&[1.0, -2.0, -2.0, -2.0, 1.0, -2.0], dim4!(3, 2, 1, 1))
-        ));
+    /// Set all gradients to zero, including this tensor's and all its ancestors
+    pub fn reset(&self) {
+        for node in self.0.tape().nodes().rev() {
+            node.zero_grad();
+        }
+    }
+}
 
-        z.backward();
-        assert!(equal_arrays(x.grad().data(), constant!(1.0; 3,2,1,1)));
-        assert!(equal_arrays(y.grad().data(), constant!(-1.0; 3,2,1,1)));
+impl<const B: u64, const C: u64, const H: u64, const W: u64> Tensor<B, C, H, W, Constant> {
+    /// Consumes the constant tensor and returns it as a variable tensor
+    pub fn unfreeze(self) -> Tensor<B, C, H, W, Variable> {
+        Tensor(Variable::new(
+            Tape::default(),
+            Node::declaration(self.data()),
+        ))
+    }
+}
+
+impl<const B: u64, const C: u64, const H: u64, const W: u64, D: Data> Tensed
+    for Tensor<B, C, H, W, D>
+{
+    type Data = D;
+    const BATCH: u64 = B;
+    const CHANNELS: u64 = C;
+    const HEIGHT: u64 = H;
+    const WIDTH: u64 = W;
+
+    fn inner(&self) -> &Self::Data {
+        &self.0
     }
 
-    #[test]
-    fn mul_forward_backward() {
-        let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let y = mu::fill::<1, 1, 3, 2>(2.0);
-        let z = x.mul(&y);
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(&[6.0, 0.0, 0.0, 0.0, 6.0, 0.0], dim4!(3, 2, 1, 1))
-        ));
-
-        z.backward();
-        assert!(equal_arrays(x.grad().data(), constant!(2.0; 3,2,1,1)));
-        assert!(equal_arrays(
-            y.grad().data(),
-            arrayfire::identity::<f32>(dim4!(3, 2, 1, 1)) * 3.0f32
-        ));
+    fn push_unary<const YB: u64, const YC: u64, const YH: u64, const YW: u64>(
+        &self,
+        data: Array<f32>,
+        reverse: UnaryReverseFn,
+        args: &[Array<f32>],
+    ) -> Tensor<YB, YC, YH, YW, D> {
+        Tensor(self.0.push_unary(data, reverse, args))
     }
 
-    #[test]
-    fn div_forward_backward() {
-        let x = mu::fill::<1, 1, 3, 2>(2.0);
-        let y = mu::fill::<1, 1, 3, 2>(4.0);
-        let z = x.div(&y);
-        assert!(equal_arrays(z.data(), constant!(0.5; 3, 2, 1, 1)));
-
-        z.backward();
-        assert!(equal_arrays(x.grad().data(), constant!(0.25; 3,2,1,1)));
-        assert!(equal_arrays(y.grad().data(), constant!(-0.125; 3,2,1,1)));
+    fn push_binary<const ZB: u64, const ZC: u64, const ZH: u64, const ZW: u64, Y: Tensed>(
+        &self,
+        other: &Y,
+        data: Array<f32>,
+        reverse: BinaryReverseFn,
+        args: &[Array<f32>],
+    ) -> Tensor<ZB, ZC, ZH, ZW, <Self::Data as Pair<Y::Data>>::Output>
+    where
+        Self::Data: Pair<Y::Data>,
+    {
+        Tensor(self.0.push_binary(other.inner(), data, reverse, args))
     }
+}
 
-    #[test]
-    fn mm_forward_backward() {
-        let x = mu::eye::<1, 1, 3, 2>(3.0);
-        let y = mu::eye::<1, 1, 2, 4>(2.0);
-        let z = x.mm(&y);
-        assert!(equal_arrays(
-            z.data(),
-            Array::new(
-                &[6.0, 0.0, 0.0, 0.0, 6.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                dim4!(3, 4, 1, 1),
-            ),
-        ));
+impl<const B: u64, const C: u64, const H: u64, const W: u64> From<Constant>
+    for Tensor<B, C, H, W, Constant>
+{
+    fn from(constant: Constant) -> Self {
+        Self(constant)
+    }
+}
 
-        z.backward();
-        assert!(equal_arrays(x.grad().data(), constant!(2.0; 3,2,1,1)));
-        assert!(equal_arrays(y.grad().data(), constant!(3.0; 2,4,1,1)));
+impl<const B: u64, const C: u64, const H: u64, const W: u64> From<Variable>
+    for Tensor<B, C, H, W, Variable>
+{
+    fn from(variable: Variable) -> Self {
+        Self(variable)
     }
 }

@@ -45,16 +45,16 @@ impl SGD {
 mod tests {
     use super::SGD;
     use crate as mu;
-    use crate::tests::equal_arrays;
-    use crate::Tensor;
+    use crate::tensor::traits::Tensed;
+    use crate::tests::equal_data;
 
     #[test]
     fn sgd_step() {
         let x = mu::fill::<1, 1, 1, 1>(1.0);
-        let optim = SGD::new(&[(&x).into()], 0.1);
+        let optim = SGD::new(&[x.inner().node()], 0.1);
 
         x.backward();
         optim.step();
-        assert!(equal_arrays(x.data(), arrayfire::constant!(0.9; 1,1,1,1)));
+        assert!(equal_data(x.data(), arrayfire::constant!(0.9; 1,1,1,1)));
     }
 }
