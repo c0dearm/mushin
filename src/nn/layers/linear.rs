@@ -23,14 +23,11 @@ where
 {
     /// Given an input computes the output
     #[inline]
-    pub fn forward<X: Tensed<CHANNELS = 1, HEIGHT = 1, WIDTH = { I }>>(
+    pub fn forward<const B: u64, const W: u64, D: Pair<T>>(
         &self,
-        x: &X,
-    ) -> Tensor<{ X::BATCH }, 1, 1, O, <X::Data as Pair<T>>::Output>
-    where
-        <X as Tensed>::Data: Pair<T>,
-    {
-        let padded = arrayfire::join(1, &x.data(), &arrayfire::constant!(1.0; 1, 1, 1, X::BATCH));
+        x: &Tensor<B, 1, 1, W, D>,
+    ) -> Tensor<B, 1, 1, O, D::Output> {
+        let padded = arrayfire::join(1, &x.data(), &arrayfire::constant!(1.0; 1, 1, 1, B));
 
         let reverse = |df: &Array<f32>, args: &[Array<f32>]| {
             let a = arrayfire::matmul(

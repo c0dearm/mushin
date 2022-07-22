@@ -72,7 +72,14 @@ mod ops;
 mod tensor;
 
 pub use gen::{custom, eye, fill, randn, randu};
+pub use graph::node::Node;
 pub use ops::{add, cos, div, mm, mul, reshape, sin, sub};
+pub use tensor::{
+    constant::Constant,
+    traits::{Data, Pair, Tensed},
+    variable::Variable,
+    Tensor,
+};
 
 #[cfg(test)]
 mod tests {

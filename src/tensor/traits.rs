@@ -1,27 +1,30 @@
 use crate::{
     graph::node::{BinaryReverseFn, UnaryReverseFn},
-    tensor::Tensor,
+    tensor::{constant::Constant, variable::Variable, Tensor},
 };
 use arrayfire::Array;
 
 /// Common methods for types holding data for a tensor. Either `Variable` or `Constant` data.
-pub trait Data {
+pub trait Data: Clone {
     /// Returns the tensor data as an arrayfire array
     fn values(&self) -> Array<f32>;
     /// Pushes new data, resulting from a unary operation, to the computation graph (if data is variable)
+    #[must_use]
     fn push_unary(&self, data: Array<f32>, reverse: UnaryReverseFn, args: &[Array<f32>]) -> Self;
+    /// Returns true if is a Constant, false if it is a Variable
+    fn is_constant() -> bool;
 }
 
 /// Common methods for pairs of types holding data for tensors. Depending on the combination of types,
 /// the resulting data type for binary operations is either `Variable` or `Constant` data.
-pub trait Pair<Y: Data> {
+pub trait Pair<Y: Data>: Data {
     /// | First parameter (Self) | Second parameter (Y) |  Output  |
     /// |------------------------|----------------------|----------|
     /// |        Variable        |        Variable      | Variable |
     /// |        Variable        |        Constant      | Variable |
     /// |        Constant        |        Variable      | Variable |
     /// |        Constant        |        Constant      | Constant |
-    type Output: Data;
+    type Output: Data + Pair<Y> + Pair<Self>;
 
     /// Pushes new data, resulting from a binary operation, to the computation graph (if output is variable)
     fn push_binary(
@@ -66,6 +69,7 @@ pub trait Tensed {
         Self::Data: Pair<Y::Data>;
 
     /// Returns the tensor data as an arrayfire array
+    #[inline]
     fn data(&self) -> Array<f32> {
         self.inner().values()
     }

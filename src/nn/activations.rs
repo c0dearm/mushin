@@ -1,16 +1,15 @@
-use crate::tensor::{traits::Tensed, Tensor};
+use crate::tensor::{
+    traits::{Data, Tensed},
+    Tensor,
+};
 use arrayfire::{Array, MatProp};
 
 /// Performs the `ReLu` activation function on the given tensor
 #[inline]
-pub fn relu<X: Tensed>(
-    x: &X,
-) -> Tensor<{ X::BATCH }, { X::CHANNELS }, { X::HEIGHT }, { X::WIDTH }, X::Data> {
-    let result = arrayfire::maxof(
-        &x.data(),
-        &arrayfire::constant!(0.0f32; X::HEIGHT,X::WIDTH,X::CHANNELS,X::BATCH),
-        false,
-    );
+pub fn relu<const B: u64, const C: u64, const H: u64, const W: u64, D: Data>(
+    x: &Tensor<B, C, H, W, D>,
+) -> Tensor<B, C, H, W, D> {
+    let result = arrayfire::maxof(&x.data(), &arrayfire::constant!(0.0f32; H,W,C,B), false);
     let reverse =
         |df: &Array<f32>, args: &[Array<f32>]| df * arrayfire::gt(&args[0], &0.0f32, false);
     x.push_unary(result, reverse, &[x.data()])

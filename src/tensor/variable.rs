@@ -20,6 +20,7 @@ pub struct Variable {
 
 impl Variable {
     /// Constructs variable data from the given tape and node. The node is pushed to the tape.
+    #[inline]
     pub fn new(mut tape: Tape, node: Node) -> Self {
         let node = Rc::new(node);
         tape.push(node.clone());
@@ -27,35 +28,48 @@ impl Variable {
     }
 
     /// Returns the gradients of the holded data as an arrayfire array
+    #[must_use]
+    #[inline]
     pub fn grad(&self) -> Array<f32> {
         self.node.grad().clone()
     }
 
     /// Returns the tape tracking the computation graph up until the existence of this variable
+    #[must_use]
+    #[inline]
     pub const fn tape(&self) -> &Tape {
         &self.tape
     }
 
     /// Returns the node in the computation graph holding the data and gradients of this variable
+    #[must_use]
+    #[inline]
     pub fn node(&self) -> Rc<Node> {
         self.node.clone()
     }
 }
 
 impl Data for Variable {
+    #[inline]
     fn push_unary(&self, data: Array<f32>, reverse: UnaryReverseFn, args: &[Array<f32>]) -> Self {
         let node = Node::unary(data, self.node(), reverse, args);
         Self::new(self.tape().clone(), node)
     }
 
+    #[inline]
     fn values(&self) -> Array<f32> {
         self.node().data().clone()
+    }
+
+    fn is_constant() -> bool {
+        false
     }
 }
 
 impl Pair<Self> for Variable {
     type Output = Self;
 
+    #[inline]
     fn push_binary(
         &self,
         other: &Self,
@@ -71,6 +85,7 @@ impl Pair<Self> for Variable {
 impl Pair<Constant> for Variable {
     type Output = Self;
 
+    #[inline]
     fn push_binary(
         &self,
         _other: &Constant,
@@ -84,6 +99,7 @@ impl Pair<Constant> for Variable {
 }
 
 impl From<Array<f32>> for Variable {
+    #[inline]
     fn from(data: Array<f32>) -> Self {
         Self::new(Tape::default(), Node::declaration(data))
     }

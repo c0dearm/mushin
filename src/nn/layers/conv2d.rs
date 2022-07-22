@@ -18,19 +18,10 @@ pub struct Conv2D<const I: u64, const O: u64, const H: u64, const W: u64, T: Dat
 impl<const I: u64, const O: u64, const H: u64, const W: u64, T: Data> Conv2D<I, O, H, W, T> {
     /// Given an input computes the output
     #[inline]
-    pub fn forward<X: Tensed<CHANNELS = { I }>>(
+    pub fn forward<const B: u64, const XH: u64, const XW: u64, D: Pair<T>>(
         &self,
-        x: &X,
-    ) -> Tensor<
-        { X::BATCH },
-        O,
-        { X::HEIGHT - H + 1 },
-        { X::WIDTH - W + 1 },
-        <X::Data as Pair<T>>::Output,
-    >
-    where
-        <X as Tensed>::Data: Pair<T>,
-    {
+        x: &Tensor<B, I, XH, XW, D>,
+    ) -> Tensor<B, O, { XH - H + 1 }, { XW - W + 1 }, D::Output> {
         let result = arrayfire::convolve2_nn(
             &x.data(),
             &self.0.data(),

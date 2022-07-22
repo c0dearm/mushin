@@ -26,6 +26,10 @@ impl Data for Constant {
     fn values(&self) -> Array<f32> {
         self.0.clone()
     }
+
+    fn is_constant() -> bool {
+        true
+    }
 }
 
 impl Pair<Variable> for Constant {
