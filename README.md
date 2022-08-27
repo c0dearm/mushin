@@ -10,6 +10,8 @@
 
 [Mushin](https://en.wikipedia.org/wiki/Mushin_(mental_state)) is a Japanese term used in martial arts that refers to the state of mind obtained by practice. At this point, a person relies not on what they think should be the next move, but what is their trained natural reaction (or instinct).
 
+_**Note**: Mushin is undergoing a major refactor, in order to provide a better API (experience) to users creating their own Deep Learning models. During the implementation of the MNIST digit recognition example I found some difficulties to ergonomically express the convolutional model. You might not see commits often until I iterate over a few different implementation possibilities. Until then, just letting you know I am working on it!_
+
 ## Description
 
 **Mushin** is a pure `Rust`, no-unsafe library for computing gradients on dynamic computational graphs using [reverse automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation). In other words, what `PyTorch` is to `Python` is what `Mushin` is to `Rust`.
